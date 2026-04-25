@@ -1,3 +1,12 @@
+# IDE and editor folders
 .idea
-.claude
 .vscode
+.claude
+
+# .NET build output
+bin/
+obj/
+
+# Mono-compiled artifacts (old csc compiler output)
+*.exe
+*.pdb
