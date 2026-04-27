@@ -1,0 +1,70 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.2.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Beginner", "Beginner", "{E89EDFB4-898B-44CF-2F82-6FBFFAD04EA1}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "1_Scalability", "1_Scalability", "{DA3AD826-230E-D34D-86B4-0EE2C585B230}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "1.4.1_HorizontalAndVerticalScaling", "Beginner\1_Scalability\1.4.1_HorizontalAndVerticalScaling.csproj", "{C87EF39E-EAA4-4C6C-FA09-A8155B7B5083}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "1.3.1_ConsistentHashing", "Beginner\1_Scalability\1.3.1_ConsistentHashing.csproj", "{67426CB0-BB2F-B121-8ABF-1DFCCD4D7912}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "1.5.1_Sharding_Code", "Beginner\1_Scalability\1.5.1_Sharding_Code.csproj", "{9C936FE8-0152-9E33-D874-86B1EFA1A120}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "2_Network_and_Traffic_Management", "2_Network_and_Traffic_Management", "{C918E368-3D49-99B0-0173-985CEDF9B207}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "1.4.3_CDN_Algos_V2", "Beginner\2_Network_and_Traffic_Management\1.4.3_CDN_Algos_V2.csproj", "{99E7DB61-76CE-DC7F-D4F8-3DEC88647FEF}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "1.3.1_Load_Balancer_Algos", "Beginner\2_Network_and_Traffic_Management\1.3.1_Load_Balancer_Algos.csproj", "{1E957358-99B2-BCCE-852A-2AF3C7C8EC06}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "1.4.2_CDN_Algos", "Beginner\2_Network_and_Traffic_Management\1.4.2_CDN_Algos.csproj", "{D7BAFDDC-42A1-0832-5FF3-B022974D6BDA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{C87EF39E-EAA4-4C6C-FA09-A8155B7B5083}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C87EF39E-EAA4-4C6C-FA09-A8155B7B5083}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C87EF39E-EAA4-4C6C-FA09-A8155B7B5083}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C87EF39E-EAA4-4C6C-FA09-A8155B7B5083}.Release|Any CPU.Build.0 = Release|Any CPU
+		{67426CB0-BB2F-B121-8ABF-1DFCCD4D7912}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{67426CB0-BB2F-B121-8ABF-1DFCCD4D7912}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{67426CB0-BB2F-B121-8ABF-1DFCCD4D7912}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{67426CB0-BB2F-B121-8ABF-1DFCCD4D7912}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9C936FE8-0152-9E33-D874-86B1EFA1A120}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9C936FE8-0152-9E33-D874-86B1EFA1A120}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9C936FE8-0152-9E33-D874-86B1EFA1A120}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9C936FE8-0152-9E33-D874-86B1EFA1A120}.Release|Any CPU.Build.0 = Release|Any CPU
+		{99E7DB61-76CE-DC7F-D4F8-3DEC88647FEF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{99E7DB61-76CE-DC7F-D4F8-3DEC88647FEF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{99E7DB61-76CE-DC7F-D4F8-3DEC88647FEF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{99E7DB61-76CE-DC7F-D4F8-3DEC88647FEF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{1E957358-99B2-BCCE-852A-2AF3C7C8EC06}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{1E957358-99B2-BCCE-852A-2AF3C7C8EC06}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{1E957358-99B2-BCCE-852A-2AF3C7C8EC06}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{1E957358-99B2-BCCE-852A-2AF3C7C8EC06}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D7BAFDDC-42A1-0832-5FF3-B022974D6BDA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D7BAFDDC-42A1-0832-5FF3-B022974D6BDA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D7BAFDDC-42A1-0832-5FF3-B022974D6BDA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D7BAFDDC-42A1-0832-5FF3-B022974D6BDA}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{DA3AD826-230E-D34D-86B4-0EE2C585B230} = {E89EDFB4-898B-44CF-2F82-6FBFFAD04EA1}
+		{C87EF39E-EAA4-4C6C-FA09-A8155B7B5083} = {DA3AD826-230E-D34D-86B4-0EE2C585B230}
+		{67426CB0-BB2F-B121-8ABF-1DFCCD4D7912} = {DA3AD826-230E-D34D-86B4-0EE2C585B230}
+		{9C936FE8-0152-9E33-D874-86B1EFA1A120} = {DA3AD826-230E-D34D-86B4-0EE2C585B230}
+		{C918E368-3D49-99B0-0173-985CEDF9B207} = {E89EDFB4-898B-44CF-2F82-6FBFFAD04EA1}
+		{99E7DB61-76CE-DC7F-D4F8-3DEC88647FEF} = {C918E368-3D49-99B0-0173-985CEDF9B207}
+		{1E957358-99B2-BCCE-852A-2AF3C7C8EC06} = {C918E368-3D49-99B0-0173-985CEDF9B207}
+		{D7BAFDDC-42A1-0832-5FF3-B022974D6BDA} = {C918E368-3D49-99B0-0173-985CEDF9B207}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {637E19A1-8C9E-4C2E-AE00-67E586EEDE57}
+	EndGlobalSection
+EndGlobal

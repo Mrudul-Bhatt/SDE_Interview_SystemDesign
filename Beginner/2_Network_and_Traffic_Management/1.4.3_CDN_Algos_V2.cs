@@ -12,6 +12,11 @@
 // Cache entries expire after a TTL. Expired entries must not be returned and should be cleaned up.
 // Models how CDN edge nodes respect Cache-Control: max-age headers.
 
+// Q4. Find the Nearest CDN Edge Server
+// Given a user's GPS location (lat, lon) and a list of CDN edge nodes, return the closest one.
+// Uses the Haversine formula — the standard great-circle distance algorithm.
+// Complexity: GetNearestServer O(n), AddServer O(1)
+
 using System;
 using System.Collections.Generic;
 using System.Threading; // Thread.Sleep for TTL demo
@@ -270,7 +275,7 @@ public class TTLCache<TKey, TValue> where TKey : notnull
         {
             _store[key] = new CacheEntry
             {
-                Value     = value,
+                Value = value,
                 // Calculate the absolute expiry time from now.
                 // WHY UtcNow + ttl (not just ttl): we need an absolute timestamp to compare
                 // against DateTime.UtcNow on each subsequent Get call.
@@ -329,6 +334,97 @@ public class TTLCache<TKey, TValue> where TKey : notnull
 }
 
 // ---------------------------------------------------------------------------
+// Q4 — CDN Router: Route User to Nearest Edge Server
+// ---------------------------------------------------------------------------
+public class CDNRouter
+{
+    // Value type representing a CDN edge server with a geographic position.
+    // WHY record: positional equality + immutability — two EdgeServer records with the same
+    // (Name, Lat, Lon) are equal by value, not by reference. Clean and self-documenting.
+    public record EdgeServer(string Name, double Lat, double Lon);
+
+    // List of all registered edge servers.
+    // WHY List (not Dictionary): we iterate over all servers on every routing call to find
+    // the minimum distance — random access by key is not needed here.
+    private readonly List<EdgeServer> _servers = new();
+
+    // Registers a new edge server at the given GPS coordinates. O(1) amortized.
+    public void AddServer(string name, double lat, double lon)
+    {
+        // Build an immutable EdgeServer record and append to the list.
+        _servers.Add(new EdgeServer(name, lat, lon));
+    }
+
+    // Returns the edge server geographically closest to the user. O(n) linear scan.
+    // WHY O(n) is acceptable: n = number of edge servers (tens to hundreds), not user count.
+    // This runs once per new user connection, not once per HTTP request.
+    public EdgeServer? GetNearestServer(double userLat, double userLon)
+    {
+        // No servers registered — return null so the caller can handle gracefully.
+        if (_servers.Count == 0) return null;
+
+        EdgeServer? nearest = null;
+        double minDistance = double.MaxValue; // start at infinity so the first server always wins
+
+        foreach (var server in _servers)
+        {
+            // Real-world surface distance from user to this server's datacenter.
+            double dist = HaversineDistanceKm(userLat, userLon, server.Lat, server.Lon);
+
+            if (dist < minDistance)
+            {
+                minDistance = dist;
+                nearest = server;
+            }
+        }
+
+        return nearest;
+    }
+
+    // Haversine formula — great-circle distance between two GPS points on Earth's surface.
+    // WHY Haversine (not Euclidean): lat/lon are angles on a sphere, not Cartesian coordinates.
+    // Euclidean distance is meaningless across thousands of km; Haversine gives the true path length.
+    private static double HaversineDistanceKm(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double R = 6371; // Earth's mean radius in km
+
+        // Convert degree differences to radians — required by Math.Sin/Cos.
+        double dLat = ToRad(lat2 - lat1);
+        double dLon = ToRad(lon2 - lon1);
+
+        // `a` = square of half the chord length between the two points (core Haversine term).
+        double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2)
+                 + Math.Cos(ToRad(lat1)) * Math.Cos(ToRad(lat2))
+                 * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+
+        // `c` = central angle between the two points in radians.
+        // Atan2 is numerically stable for both tiny and very large distances.
+        double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+
+        // Surface distance = radius * central angle.
+        return R * c;
+    }
+
+    // Converts degrees to radians — Haversine requires radian inputs.
+    private static double ToRad(double deg) => deg * Math.PI / 180;
+
+    // Prints the distance from the user to every registered server.
+    public void PrintDistances(double userLat, double userLon)
+    {
+        Console.WriteLine($"  User at ({userLat}, {userLon}):");
+        foreach (var server in _servers)
+        {
+            double dist = HaversineDistanceKm(userLat, userLon, server.Lat, server.Lon);
+            Console.WriteLine($"    {server.Name,-12}: {dist,6:F0} km");
+        }
+    }
+}
+
+
+
+
+
+// ---------------------------------------------------------------------------
 // Entry point — demos for all 3 questions
 // ---------------------------------------------------------------------------
 public class Program
@@ -345,9 +441,9 @@ public class Program
         var lru = new LRUCache<string, string>(capacity: 3);
 
         Console.WriteLine("\n=== Fill to capacity ===");
-        lru.Put("homepage.html", "<html>home</html>");  lru.PrintCache();
-        lru.Put("logo.png",      "binary_logo");        lru.PrintCache();
-        lru.Put("style.css",     "body{margin:0}");     lru.PrintCache();
+        lru.Put("homepage.html", "<html>home</html>"); lru.PrintCache();
+        lru.Put("logo.png", "binary_logo"); lru.PrintCache();
+        lru.Put("style.css", "body{margin:0}"); lru.PrintCache();
 
         Console.WriteLine("\n=== Access homepage.html → moves to MRU front ===");
         lru.Get("homepage.html");
@@ -396,19 +492,42 @@ public class Program
 
         Console.WriteLine("\n=== Put entries with different TTLs ===");
         ttl.Put("homepage.html", "<html>...</html>", TimeSpan.FromSeconds(2));
-        ttl.Put("logo.png",      "binary_data",      TimeSpan.FromSeconds(10));
+        ttl.Put("logo.png", "binary_data", TimeSpan.FromSeconds(10));
 
         Console.WriteLine("  Immediately after Put:");
         Console.WriteLine($"  homepage.html → {ttl.Get("homepage.html") ?? "null"}");
-        Console.WriteLine($"  logo.png      → {ttl.Get("logo.png")      ?? "null"}");
+        Console.WriteLine($"  logo.png      → {ttl.Get("logo.png") ?? "null"}");
 
         Console.WriteLine("\n=== Wait 3 seconds — homepage.html (TTL=2s) expires ===");
         Thread.Sleep(3000);
 
         Console.WriteLine($"  homepage.html → {ttl.Get("homepage.html") ?? "null (expired)"}");
-        Console.WriteLine($"  logo.png      → {ttl.Get("logo.png")      ?? "null (expired)"}");
+        Console.WriteLine($"  logo.png      → {ttl.Get("logo.png") ?? "null (expired)"}");
 
         int cleaned = ttl.Cleanup();
         Console.WriteLine($"\n  Proactive cleanup evicted {cleaned} expired entries.");
+
+        // ===================================================================
+        // Q4 DEMO -- CDN Router: nearest edge server
+        // ===================================================================
+        Console.WriteLine("\n\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557");
+        Console.WriteLine("\u2551  Q4: CDN Router (Nearest Edge Server) \u2551");
+        Console.WriteLine("\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d");
+
+        var router = new CDNRouter();
+        router.AddServer("US-East", lat: 39.0, lon: -77.0); // Virginia
+        router.AddServer("US-West", lat: 37.3, lon: -121.9); // California
+        router.AddServer("EU-Central", lat: 50.1, lon: 8.7); // Frankfurt
+        router.AddServer("AP-South", lat: 19.0, lon: 72.8); // Mumbai
+
+        Console.WriteLine("\n=== User in London (51.5, -0.1) ===");
+        router.PrintDistances(51.5, -0.1);
+        var nearest = router.GetNearestServer(51.5, -0.1);
+        Console.WriteLine($"  Routed to: {nearest?.Name}"); // EU-Central
+
+        Console.WriteLine("\n=== User in Tokyo (35.7, 139.7) ===");
+        router.PrintDistances(35.7, 139.7);
+        var nearestTokyo = router.GetNearestServer(35.7, 139.7);
+        Console.WriteLine($"  Routed to: {nearestTokyo?.Name}"); // AP-South
     }
 }
