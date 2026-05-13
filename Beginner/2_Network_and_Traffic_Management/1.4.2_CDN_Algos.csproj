@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="1.3.1_CDN_Algos.cs" />
+    <Compile Include="1.4.2_CDN_Algos.cs" />
   </ItemGroup>
 </Project>
