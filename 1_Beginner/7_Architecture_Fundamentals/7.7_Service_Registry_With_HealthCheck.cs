@@ -97,16 +97,15 @@ namespace ArchitectureFundamentals
         // One list of instances per service name. In production (Consul, etcd) this
         // is a strongly consistent distributed key-value store replicated across nodes.
         // Dictionary here keeps the demo dependency-free while showing the algorithm.
-        private readonly Dictionary<string, List<ServiceInstance>> _registry
-            = new Dictionary<string, List<ServiceInstance>>();
+        private readonly Dictionary<string, List<ServiceInstance>> _registry = [];
 
         // A single lock covering all registry mutations. Every public method acquires
         // this lock so concurrent Register/Discover/HealthCheck calls can't corrupt
         // the list (e.g. Discover iterating while HealthCheck removes an element).
-        private readonly object _lock = new object();
+        private readonly object _lock = new();
 
         private readonly int _failThreshold; // consecutive failures before marking DOWN
-        private readonly TimeSpan _ttl;           // deregister if no heartbeat within this window
+        private readonly TimeSpan _ttl; // deregister if no heartbeat within this window
 
         // Round-robin counter persists across Discover() calls so each call picks
         // the next instance. A local variable would restart from index 0 every call
@@ -127,7 +126,7 @@ namespace ArchitectureFundamentals
             lock (_lock)
             {
                 if (!_registry.ContainsKey(serviceName))
-                    _registry[serviceName] = new List<ServiceInstance>();
+                    _registry[serviceName] = [];
 
                 // Heartbeat path: already registered — just refresh LastSeen.
                 // Without this, a service that restarts would add a second entry

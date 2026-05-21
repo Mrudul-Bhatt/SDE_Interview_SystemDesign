@@ -35,29 +35,71 @@ using System.Linq;
 namespace PubSubAndAsync
 {
     // -------------------------------------------------------------------------
+    // OrderEvent — the concrete message type published on "order.placed"
+    // -------------------------------------------------------------------------
+    // In production (Kafka, SNS) this is serialized to JSON before publishing.
+    // Every subscriber receives the same payload; each reads only the fields it needs.
+    //
+    // Real-world JSON on the wire:
+    //   {
+    //     "MessageId":  "msg-a1b2c3",
+    //     "Topic":      "order.placed",
+    //     "OrderId":    1001,
+    //     "CustomerId": "cust-42",
+    //     "Total":      99.99,
+    //     "PlacedAt":   "2026-05-21T10:15:00Z"
+    //   }
+    //
+    // email-service    reads CustomerId + Total       → "Your $99.99 order is confirmed"
+    // inventory-service reads OrderId                 → reserve stock for that order
+    // analytics-service reads Total + PlacedAt        → update revenue dashboard
+    // fraud-service    reads CustomerId + Total       → score transaction risk
+    // loyalty-service  reads CustomerId + Total       → award points
+    public class OrderEvent
+    {
+        public string MessageId { get; set; }   // unique per message; used for deduplication
+        public string Topic { get; set; }   // e.g. "order.placed"
+        public int OrderId { get; set; }   // e.g. 1001
+        public string CustomerId { get; set; }   // e.g. "cust-42"
+        public double Total { get; set; }   // e.g. 99.99 (USD)
+        public string PlacedAt { get; set; }   // ISO-8601 timestamp
+
+        public override string ToString() =>
+            $"OrderEvent {{ OrderId={OrderId}, Customer={CustomerId}, Total=${Total:F2}, PlacedAt={PlacedAt} }}";
+    }
+
+    // -------------------------------------------------------------------------
     // PubSubBroker
     // -------------------------------------------------------------------------
     public class PubSubBroker
     {
         // topic → list of (subscriberId, handler)
-        // Each entry in the list is a named subscriber and its callback.
-        // The subscriber ID lets us deduplicate on re-subscribe and find the
-        // right entry to remove on unsubscribe — without it we'd need reference
-        // equality on the delegate, which is unreliable for lambda captures.
-        private readonly Dictionary<string, List<(string Id, Action<string, object> Handler)>>
-            _subscribers = new Dictionary<string, List<(string Id, Action<string, object> Handler)>>();
+        //
+        // After 4 services subscribe to "order.placed", _subscribers looks like:
+        //   "order.placed" → [
+        //     ("email-service",     handler that sends confirmation email),
+        //     ("inventory-service", handler that reserves stock),
+        //     ("analytics-service", handler that records the sale),
+        //     ("fraud-service",     handler that scores risk)
+        //   ]
+        //
+        // When OrderId=1001 is published, every handler fires with that same OrderEvent.
+        // The subscriber ID lets us deduplicate on re-subscribe and find the right
+        // entry to remove on Unsubscribe — without it we'd need reference equality
+        // on the delegate, which is unreliable for lambda captures.
+        private readonly Dictionary<string, List<(string Id, Action<string, OrderEvent> Handler)>> _subscribers = [];
 
         // Protects _subscribers from concurrent Subscribe/Unsubscribe/Publish calls.
         // We release the lock before invoking handlers (see snapshot pattern below)
         // so handlers can themselves call Subscribe/Unsubscribe without deadlocking.
-        private readonly object _lock = new object();
+        private readonly object _lock = new();
 
-        public void Subscribe(string topic, string subscriberId, Action<string, object> handler)
+        public void Subscribe(string topic, string subscriberId, Action<string, OrderEvent> handler)
         {
             lock (_lock)
             {
                 if (!_subscribers.ContainsKey(topic))
-                    _subscribers[topic] = new List<(string, Action<string, object>)>();
+                    _subscribers[topic] = [];
 
                 // Idempotent: a service that restarts and re-subscribes should not
                 // end up with two entries. Duplicate entries would deliver each
@@ -87,9 +129,9 @@ namespace PubSubAndAsync
 
         // Fan-out: deliver to ALL current subscribers of the topic.
         // Returns the number of subscribers notified.
-        public int Publish(string topic, object message)
+        public int Publish(string topic, OrderEvent message)
         {
-            List<(string Id, Action<string, object> Handler)> snapshot;
+            List<(string Id, Action<string, OrderEvent> Handler)> snapshot;
 
             lock (_lock)
             {
@@ -104,7 +146,7 @@ namespace PubSubAndAsync
                 // calls Subscribe/Unsubscribe would deadlock trying to acquire _lock.
                 // The snapshot is a shallow copy of the list (not the handlers themselves),
                 // so new subscribers added after Publish starts don't receive this message.
-                snapshot = new List<(string, Action<string, object>)>(subs);
+                snapshot = [.. subs];
             }
 
             Console.WriteLine($"[BROKER] Publishing to '{topic}' → {snapshot.Count} subscriber(s)");
@@ -170,7 +212,7 @@ namespace PubSubAndAsync
             broker.PrintTopics();
 
             Console.WriteLine("\n  Order Service publishes (knows nothing about subscribers):");
-            broker.Publish("order.placed", new { OrderId = 1001, Total = 99.99, UserId = 42 });
+            broker.Publish("order.placed", new OrderEvent { MessageId = "msg-a1b2c3", Topic = "order.placed", OrderId = 1001, CustomerId = "cust-42", Total = 99.99, PlacedAt = "2026-05-21T10:15:00Z" });
 
             // =================================================================
             // Scenario 2 — New service subscribes; zero changes to Order Service
@@ -186,7 +228,7 @@ namespace PubSubAndAsync
                 Console.WriteLine($"  [loyalty-service]   Adding points for: {m}"));
 
             Console.WriteLine("\n  Same Publish call — now 5 subscribers receive it:");
-            broker.Publish("order.placed", new { OrderId = 1002, Total = 49.99, UserId = 7 });
+            broker.Publish("order.placed", new OrderEvent { MessageId = "msg-d4e5f6", Topic = "order.placed", OrderId = 1002, CustomerId = "cust-17", Total = 49.99, PlacedAt = "2026-05-21T10:16:30Z" });
 
             // =================================================================
             // Scenario 3 — A service unsubscribes; remaining services are unaffected
@@ -200,7 +242,7 @@ namespace PubSubAndAsync
             Console.WriteLine();
             broker.Unsubscribe("order.placed", "fraud-service");
             Console.WriteLine("\n  Publish after fraud-service unsubscribes:");
-            broker.Publish("order.placed", new { OrderId = 1003, Total = 199.99, UserId = 15 });
+            broker.Publish("order.placed", new OrderEvent { MessageId = "msg-g7h8i9", Topic = "order.placed", OrderId = 1003, CustomerId = "cust-88", Total = 199.99, PlacedAt = "2026-05-21T10:17:45Z" });
         }
     }
 

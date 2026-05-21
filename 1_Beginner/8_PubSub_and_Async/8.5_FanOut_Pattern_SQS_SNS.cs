@@ -45,28 +45,71 @@ using System.Collections.Generic;
 namespace PubSubAndAsync
 {
     // -------------------------------------------------------------------------
+    // OrderEvent — the concrete message type flowing through the fan-out system
+    // -------------------------------------------------------------------------
+    // In production (AWS SNS/SQS) this would be serialized to JSON and sent as
+    // the SQS message body. Every service receives a copy of the same payload.
+    //
+    // Real-world example stored in each SQS queue after an order is placed:
+    //   {
+    //     "MessageId":  "msg-a1b2c3",
+    //     "Topic":      "order.placed",
+    //     "OrderId":    1001,
+    //     "CustomerId": "cust-42",
+    //     "Total":      99.99,
+    //     "Items":      [{ "Sku": "SHOE-XL", "Qty": 2 }],
+    //     "PlacedAt":   "2026-05-21T10:15:00Z"
+    //   }
+    //
+    // email-service    reads OrderId + CustomerId + Total  → sends "Your order is confirmed"
+    // inventory-service reads OrderId + Items              → decrements SHOE-XL stock by 2
+    // analytics-service reads OrderId + Total + PlacedAt  → updates revenue dashboard
+    public class OrderEvent
+    {
+        public string MessageId { get; set; }   // e.g. "msg-a1b2c3"  (SQS MessageId in prod)
+        public string Topic { get; set; }   // e.g. "order.placed"
+        public int OrderId { get; set; }   // e.g. 1001
+        public string CustomerId { get; set; }   // e.g. "cust-42"
+        public double Total { get; set; }   // e.g. 99.99  (USD)
+        public string PlacedAt { get; set; }   // ISO-8601 timestamp
+
+        public override string ToString() =>
+            $"OrderEvent {{ MessageId={MessageId}, Topic={Topic}, OrderId={OrderId}, " +
+            $"Customer={CustomerId}, Total=${Total:F2}, PlacedAt={PlacedAt} }}";
+    }
+
+    // -------------------------------------------------------------------------
     // FanOutBroker
     // -------------------------------------------------------------------------
     public class FanOutBroker
     {
-        // Each subscriber service gets its own isolated Queue<object>.
-        // Isolation is the core guarantee: if email-service's queue grows to
-        // 100k messages, inventory-service's queue is at 0 and unaffected.
-        // In AWS, each Queue<> maps to a physical SQS queue with its own
+        // _queues["email-service"]     → Queue<OrderEvent> holding messages email workers will process
+        // _queues["inventory-service"] → Queue<OrderEvent> holding messages inventory workers will process
+        // _queues["analytics-service"] → Queue<OrderEvent> holding messages analytics workers will process
+        //
+        // After 3 orders are published, each queue looks like:
+        //   Queue<OrderEvent> [
+        //     OrderEvent { OrderId=1001, Customer=cust-42, Total=$99.99  },
+        //     OrderEvent { OrderId=1002, Customer=cust-17, Total=$49.99  },
+        //     OrderEvent { OrderId=1003, Customer=cust-88, Total=$149.99 }
+        //   ]
+        //
+        // Isolation guarantee: if email-service's queue grows to 100k messages,
+        // inventory-service's queue is at 0 and completely unaffected.
+        // In AWS each Queue<> maps to a physical SQS queue with its own
         // throughput limits, visibility timeouts, and dead-letter queue.
-        private readonly Dictionary<string, Queue<object>> _queues
-            = new Dictionary<string, Queue<object>>();
+        private readonly Dictionary<string, Queue<OrderEvent>> _queues = [];
 
         // One lock protecting _queues. Publish and Consume must not run
         // concurrently — Consume dequeuing while Publish is enqueuing could
         // corrupt the Queue<> internal state (not thread-safe on its own).
-        private readonly object _lock = new object();
+        private readonly object _lock = new();
 
         public void AddSubscriberQueue(string serviceName)
         {
             lock (_lock)
             {
-                _queues[serviceName] = new Queue<object>();
+                _queues[serviceName] = new Queue<OrderEvent>();
                 Console.WriteLine($"[FAN-OUT] Queue created for: {serviceName}");
             }
         }
@@ -76,7 +119,7 @@ namespace PubSubAndAsync
         // each queue entry is independent, but they all point to the same
         // immutable message object. If messages were mutable, each service
         // would need a deep-cloned copy to avoid cross-service data corruption.
-        public void Publish(string topic, object message)
+        public void Publish(string topic, OrderEvent message)
         {
             lock (_lock)
             {
@@ -94,7 +137,7 @@ namespace PubSubAndAsync
         // own consumer loop at its own pace — a blocking call would couple
         // the consumer's thread to the queue, defeating the async isolation.
         // In production (SQS), this maps to ReceiveMessage with WaitTimeSeconds=0.
-        public object Consume(string serviceName)
+        public OrderEvent Consume(string serviceName)
         {
             lock (_lock)
             {
@@ -147,9 +190,9 @@ namespace PubSubAndAsync
             fanOut.AddSubscriberQueue("analytics-service");
 
             Console.WriteLine();
-            fanOut.Publish("order.placed", new { OrderId = 1001, Total = 99.99 });
-            fanOut.Publish("order.placed", new { OrderId = 1002, Total = 49.99 });
-            fanOut.Publish("order.placed", new { OrderId = 1003, Total = 149.99 });
+            fanOut.Publish("order.placed", new OrderEvent { MessageId = "msg-a1b2c3", Topic = "order.placed", OrderId = 1001, CustomerId = "cust-42", Total = 99.99, PlacedAt = "2026-05-21T10:15:00Z" });
+            fanOut.Publish("order.placed", new OrderEvent { MessageId = "msg-d4e5f6", Topic = "order.placed", OrderId = 1002, CustomerId = "cust-17", Total = 49.99, PlacedAt = "2026-05-21T10:16:30Z" });
+            fanOut.Publish("order.placed", new OrderEvent { MessageId = "msg-g7h8i9", Topic = "order.placed", OrderId = 1003, CustomerId = "cust-88", Total = 149.99, PlacedAt = "2026-05-21T10:17:45Z" });
 
             fanOut.PrintStatus();
 
@@ -163,7 +206,7 @@ namespace PubSubAndAsync
             Console.WriteLine("╚═══════════════════════════════════════════════════════════╝");
 
             Console.WriteLine();
-            object msg;
+            OrderEvent msg;
             while ((msg = fanOut.Consume("email-service")) != null)
                 Console.WriteLine($"  [email-service] Processed: {msg}");
 

@@ -45,17 +45,16 @@ namespace ResiliencePatterns
     {
         private class Entry
         {
-            public string   Value;
+            public string Value;
             public DateTime ExpiresAt; // DateTime.MaxValue if no TTL
         }
 
-        private readonly Dictionary<string, Entry> _store
-            = new Dictionary<string, Entry>();
+        private readonly Dictionary<string, Entry> _store = [];
 
         // Single lock for all operations — simulates Redis single-threaded atomicity.
         // Without this, two threads calling SetNxEx simultaneously could both pass
         // the "key doesn't exist" check and both believe they acquired the lock.
-        private readonly object _lock = new object();
+        private readonly object _lock = new();
 
         // SET key value NX EX ttlMs
         // Returns true if key was set (i.e. we acquired the lock).
@@ -65,15 +64,14 @@ namespace ResiliencePatterns
             lock (_lock)
             {
                 // Treat expired entries as non-existent — same as Redis TTL behaviour.
-                if (_store.TryGetValue(key, out Entry existing) &&
-                    DateTime.UtcNow < existing.ExpiresAt)
+                if (_store.TryGetValue(key, out Entry existing) && DateTime.UtcNow < existing.ExpiresAt)
                 {
                     return false; // key still alive — someone else holds the lock
                 }
 
                 _store[key] = new Entry
                 {
-                    Value     = value,
+                    Value = value,
                     ExpiresAt = DateTime.UtcNow.AddMilliseconds(ttlMs)
                 };
                 return true; // lock acquired
@@ -114,6 +112,34 @@ namespace ResiliencePatterns
                 return entry.Value;
             }
         }
+
+        // Shows what is actually stored in Redis right now — useful for understanding
+        // the lock lifecycle. In production you'd use "redis-cli KEYS lock:*" + TTL.
+        //
+        // Example output while Server 1 holds the booking lock:
+        //   [Redis state]
+        //     lock:booking:seat-A5  →  token=3f2a1b...  expires=10:15:03.210  (2847 ms left)
+        //
+        // After release:
+        //   [Redis state]  (empty — key deleted)
+        public void PrintState(string label = "Redis state")
+        {
+            lock (_lock)
+            {
+                Console.WriteLine($"\n  [{label}]");
+                bool any = false;
+                foreach (var (key, entry) in _store)
+                {
+                    double msLeft = (entry.ExpiresAt - DateTime.UtcNow).TotalMilliseconds;
+                    if (msLeft <= 0) continue; // skip expired
+                    Console.WriteLine($"    {key}");
+                    Console.WriteLine($"      token   = {entry.Value[..8]}...  (ownership proof)");
+                    Console.WriteLine($"      expires = {entry.ExpiresAt:HH:mm:ss.fff}  ({msLeft:F0} ms left)");
+                    any = true;
+                }
+                if (!any) Console.WriteLine("    (empty — no locks held)");
+            }
+        }
     }
 
     // -------------------------------------------------------------------------
@@ -122,10 +148,10 @@ namespace ResiliencePatterns
     public class DistributedLock : IDisposable
     {
         private readonly RedisSimulator _redis;
-        private readonly string         _lockKey;
-        private readonly int            _ttlMs;
-        private readonly int            _retryIntervalMs;
-        private readonly int            _maxRetries;
+        private readonly string _lockKey;
+        private readonly int _ttlMs;
+        private readonly int _retryIntervalMs;
+        private readonly int _maxRetries;
 
         // Our ownership token for this lock acquisition.
         // Null means we do not currently hold the lock.
@@ -137,16 +163,16 @@ namespace ResiliencePatterns
 
         public DistributedLock(
             RedisSimulator redis,
-            string         lockKey,
-            int            ttlMs           = 5000,
-            int            retryIntervalMs = 50,
-            int            maxRetries      = 20)
+            string lockKey,
+            int ttlMs = 5000,
+            int retryIntervalMs = 50,
+            int maxRetries = 20)
         {
-            _redis           = redis;
-            _lockKey         = lockKey;
-            _ttlMs           = ttlMs;
+            _redis = redis;
+            _lockKey = lockKey;
+            _ttlMs = ttlMs;
             _retryIntervalMs = retryIntervalMs;
-            _maxRetries      = maxRetries;
+            _maxRetries = maxRetries;
         }
 
         // Non-blocking: attempt once, return false immediately if lock is held.
@@ -208,13 +234,13 @@ namespace ResiliencePatterns
     // -------------------------------------------------------------------------
     public class Program
     {
-        private static readonly RedisSimulator Redis = new RedisSimulator();
+        private static readonly RedisSimulator Redis = new();
 
         // Shared state — represents a seat booking database row
-        private static int    _seatsAvailable = 1;
-        private static string _bookedBy       = null;
-        private static int    _doubleBookings = 0;
-        private static int    _successfulBookings = 0;
+        private static int _seatsAvailable = 1;
+        private static string _bookedBy = null;
+        private static int _doubleBookings = 0;
+        private static int _successfulBookings = 0;
 
         public static void Main()
         {
@@ -230,12 +256,15 @@ namespace ResiliencePatterns
             var lock1 = new DistributedLock(Redis, "lock:booking:seat-A5", ttlMs: 3000);
 
             bool acquired = lock1.Acquire();
-            Console.WriteLine($"\n  Server 1 acquired: {acquired}  (token: {(lock1.IsHeld ? "set" : "none")})");
-            Console.WriteLine("  Server 1: reading seat status... booking seat A5...");
+            Console.WriteLine($"\n  Server 1 acquired: {acquired}");
+            Redis.PrintState("Redis — lock held by Server 1");
+
+            Console.WriteLine("\n  Server 1: reading seat status... booking seat A5...");
             Thread.Sleep(50); // simulate DB work
             Console.WriteLine("  Server 1: done. Releasing lock.");
             bool released = lock1.Release();
             Console.WriteLine($"  Server 1 released: {released}");
+            Redis.PrintState("Redis — after release");
 
             // =================================================================
             // Scenario 2 — Two servers compete for the same lock
@@ -252,15 +281,19 @@ namespace ResiliencePatterns
 
             server1Lock.Acquire();
             Console.WriteLine($"\n  Server 1 acquired: {server1Lock.IsHeld}");
+            Redis.PrintState("Redis — Server 1 holds lock:inventory:item-99");
 
             bool server2Got = server2Lock.TryAcquire(); // non-blocking — returns immediately
-            Console.WriteLine($"  Server 2 TryAcquire (non-blocking): {server2Got}  ← false, lock held");
+            Console.WriteLine($"\n  Server 2 TryAcquire (non-blocking): {server2Got}  ← false, lock held");
+            Console.WriteLine("  (Server 2 reads same key, sees a live token → NX fails → returns false immediately)");
 
             server1Lock.Release();
-            Console.WriteLine("  Server 1 released lock.");
+            Console.WriteLine("\n  Server 1 released lock.");
+            Redis.PrintState("Redis — after Server 1 releases");
 
             server2Got = server2Lock.TryAcquire();
-            Console.WriteLine($"  Server 2 TryAcquire after release: {server2Got}  ← now succeeds");
+            Console.WriteLine($"\n  Server 2 TryAcquire after release: {server2Got}  ← now succeeds");
+            Redis.PrintState("Redis — Server 2 now holds the lock");
             server2Lock.Release();
 
             // =================================================================
@@ -274,20 +307,23 @@ namespace ResiliencePatterns
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 
             // Short TTL (200ms) to avoid a long sleep in the demo
-            var crashLock   = new DistributedLock(Redis, "lock:job:nightly-report", ttlMs: 200);
+            var crashLock = new DistributedLock(Redis, "lock:job:nightly-report", ttlMs: 200);
             var recoveryLock = new DistributedLock(Redis, "lock:job:nightly-report", ttlMs: 3000);
 
             crashLock.Acquire();
             Console.WriteLine($"\n  Server 1 acquired (TTL=200ms). Simulating crash — never releases.");
+            Redis.PrintState("Redis — Server 1 holds lock:job:nightly-report (200ms TTL)");
 
             bool immediateRetry = recoveryLock.TryAcquire();
-            Console.WriteLine($"  Server 2 immediate retry: {immediateRetry}  ← lock still alive");
+            Console.WriteLine($"\n  Server 2 immediate retry: {immediateRetry}  ← lock still alive");
 
             Console.WriteLine("  Waiting 250ms for TTL to expire...");
             Thread.Sleep(250);
 
+            Redis.PrintState("Redis — after TTL expiry (key auto-deleted by Redis)");
             bool afterExpiry = recoveryLock.TryAcquire();
-            Console.WriteLine($"  Server 2 after TTL expiry: {afterExpiry}  ← lock acquired, no deadlock");
+            Console.WriteLine($"\n  Server 2 after TTL expiry: {afterExpiry}  ← lock acquired, no deadlock");
+            Redis.PrintState("Redis — Server 2 holds the lock (Server 1 gone forever)");
             recoveryLock.Release();
 
             // =================================================================
@@ -300,9 +336,9 @@ namespace ResiliencePatterns
             Console.WriteLine("║  Scenario 4: 20 concurrent threads — only 1 books last seat   ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 
-            _seatsAvailable     = 1;
-            _bookedBy           = null;
-            _doubleBookings     = 0;
+            _seatsAvailable = 1;
+            _bookedBy = null;
+            _doubleBookings = 0;
             _successfulBookings = 0;
 
             var threads = new Thread[20];
@@ -329,25 +365,29 @@ namespace ResiliencePatterns
             Console.WriteLine("║  Scenario 5: Stale release — UUID check prevents wrong delete  ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 
-            var staleHolder  = new DistributedLock(Redis, "lock:order:99", ttlMs: 200);
-            var newHolder    = new DistributedLock(Redis, "lock:order:99", ttlMs: 5000);
+            var staleHolder = new DistributedLock(Redis, "lock:order:99", ttlMs: 200);
+            var newHolder = new DistributedLock(Redis, "lock:order:99", ttlMs: 5000);
 
             staleHolder.Acquire();
             Console.WriteLine($"\n  Server 1 acquired lock (TTL=200ms). Simulating long GC pause...");
+            Redis.PrintState("Redis — Server 1 token written (token-A)");
 
             Thread.Sleep(250); // lock expires during this pause
 
             newHolder.Acquire();
-            Console.WriteLine($"  Server 2 acquired lock after Server 1's TTL expired.");
+            Console.WriteLine($"\n  Server 2 acquired lock after Server 1's TTL expired.");
+            Redis.PrintState("Redis — Server 2 wrote a NEW token (token-B), Server 1's token-A is gone");
             Console.WriteLine($"  Server 2 is now in critical section.");
 
-            // Server 1 "wakes up" and tries to release — but its token is stale
+            // Server 1 "wakes up" and tries to release — its old token-A no longer matches token-B
             bool staleRelease = staleHolder.Release();
-            Console.WriteLine($"\n  Server 1 wakes up, attempts release: {staleRelease}  ← false (UUID mismatch)");
+            Console.WriteLine($"\n  Server 1 wakes up, attempts release: {staleRelease}  ← false (token-A ≠ token-B, safe rejection)");
             Console.WriteLine($"  Server 2 lock still held: {newHolder.IsHeld}  ← true, protected");
+            Redis.PrintState("Redis — Server 2's lock intact after Server 1's stale release attempt");
 
             bool validRelease = newHolder.Release();
-            Console.WriteLine($"  Server 2 releases normally: {validRelease}  ← true");
+            Console.WriteLine($"\n  Server 2 releases normally: {validRelease}  ← true");
+            Redis.PrintState("Redis — all locks released");
         }
 
         // Critical section: read seat count, book if available, check for double-booking
@@ -357,10 +397,10 @@ namespace ResiliencePatterns
             // compete on the same key — only one wins the Redis SET NX at a time.
             using var lk = new DistributedLock(
                 Redis,
-                lockKey:         "lock:booking:seat-B7",
-                ttlMs:           3000,
+                lockKey: "lock:booking:seat-B7",
+                ttlMs: 3000,
                 retryIntervalMs: 30,
-                maxRetries:      50);
+                maxRetries: 50);
 
             if (!lk.Acquire())
             {

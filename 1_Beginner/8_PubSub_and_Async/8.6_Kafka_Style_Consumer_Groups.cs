@@ -52,6 +52,39 @@ using System.Collections.Generic;
 namespace PubSubAndAsync
 {
     // -------------------------------------------------------------------------
+    // OrderEvent — the concrete message appended to the Kafka-style log
+    // -------------------------------------------------------------------------
+    // In production this is serialized to bytes and written to a Kafka partition.
+    // The log retains every record permanently; consumers index into it by offset.
+    //
+    // After 6 orders are published, the log looks like:
+    //   offset 0 → OrderEvent { OrderId=1001, Customer=cust-42, Total=$10.00 }
+    //   offset 1 → OrderEvent { OrderId=1002, Customer=cust-17, Total=$20.00 }
+    //   offset 2 → OrderEvent { OrderId=1003, Customer=cust-88, Total=$30.00 }
+    //   offset 3 → OrderEvent { OrderId=1004, Customer=cust-05, Total=$40.00 }
+    //   offset 4 → OrderEvent { OrderId=1005, Customer=cust-33, Total=$50.00 }
+    //   offset 5 → OrderEvent { OrderId=1006, Customer=cust-71, Total=$60.00 }
+    //
+    // email-service (2 instances) splits the log by round-robin:
+    //   email-1 → offsets 0, 2, 4  (orders 1001, 1003, 1005)
+    //   email-2 → offsets 1, 3, 5  (orders 1002, 1004, 1006)
+    //
+    // analytics-service (1 instance) reads every offset 0–5 independently.
+    //
+    // A late-joining audit-service starts at offset 0 and replays the full history.
+    public class OrderEvent
+    {
+        public string MessageId { get; set; }   // e.g. "msg-a1b2c3"
+        public int OrderId { get; set; }   // e.g. 1001
+        public string CustomerId { get; set; }   // e.g. "cust-42"
+        public double Total { get; set; }   // e.g. 10.00 (USD)
+        public string PlacedAt { get; set; }   // ISO-8601 timestamp
+
+        public override string ToString() =>
+            $"OrderEvent {{ OrderId={OrderId}, Customer={CustomerId}, Total=${Total:F2}, PlacedAt={PlacedAt} }}";
+    }
+
+    // -------------------------------------------------------------------------
     // KafkaStyleTopic
     // -------------------------------------------------------------------------
     public class KafkaStyleTopic
@@ -59,7 +92,11 @@ namespace PubSubAndAsync
         // Append-only log: messages are never removed. Each position is a
         // permanent, stable offset. This is what makes replay possible — a queue
         // that deletes on consume can never re-deliver to a late-joining group.
-        private readonly List<object> _log = new List<object>();
+        //
+        // _log[0] = OrderEvent { OrderId=1001, ... }
+        // _log[1] = OrderEvent { OrderId=1002, ... }
+        // _log[2] = OrderEvent { OrderId=1003, ... }  ← offset 2, never deleted
+        private readonly List<OrderEvent> _log = [];
 
         // GroupState tracks each consumer group's independent read position.
         // GroupOffset: the next offset this group will read.
@@ -70,18 +107,17 @@ namespace PubSubAndAsync
             public int GroupOffset; // next offset to read
         }
 
-        private readonly Dictionary<string, GroupState> _groups
-            = new Dictionary<string, GroupState>();
+        private readonly Dictionary<string, GroupState> _groups = [];
 
         // One lock for both _log and _groups. Publish appends to _log; Poll reads
         // _log by index — they must not run concurrently or GroupOffset could get
         // ahead of the log length, causing an IndexOutOfRangeException.
-        private readonly object _lock = new object();
+        private readonly object _lock = new();
 
         // Publish is O(1): List.Add is amortized O(1). Kafka achieves the same
         // with a sequential write to a memory-mapped segment file — sequential
         // disk I/O is often faster than random-access reads.
-        public void Publish(object message)
+        public void Publish(OrderEvent message)
         {
             lock (_lock)
             {
@@ -99,7 +135,7 @@ namespace PubSubAndAsync
             {
                 _groups[groupName] = new GroupState
                 {
-                    Instances = new List<string>(instanceIds),
+                    Instances = [.. instanceIds],
                     GroupOffset = 0
                 };
                 Console.WriteLine($"[GROUP]  '{groupName}' registered with " +
@@ -110,7 +146,7 @@ namespace PubSubAndAsync
 
         // Poll: return the next (instanceId, message) for the group, or (null, null)
         // if the group has consumed all published messages (fully caught up).
-        public (string InstanceId, object Message) Poll(string groupName)
+        public (string InstanceId, OrderEvent Message) Poll(string groupName)
         {
             lock (_lock)
             {
@@ -121,7 +157,7 @@ namespace PubSubAndAsync
                 if (group.GroupOffset >= _log.Count)
                     return (null, null);
 
-                object message = _log[group.GroupOffset];
+                OrderEvent message = _log[group.GroupOffset];
 
                 // Round-robin dispatch within the group:
                 // GroupOffset % Instances.Count maps each successive message to the
@@ -179,9 +215,10 @@ namespace PubSubAndAsync
             topic.RegisterGroup("email-service", new List<string> { "email-1", "email-2" });
             topic.RegisterGroup("analytics-service", new List<string> { "analytics-1" });
 
+            string[] customers1 = { "cust-42", "cust-17", "cust-88", "cust-05", "cust-33", "cust-71" };
             Console.WriteLine("\n  Publishing 6 orders:");
             for (int i = 1; i <= 6; i++)
-                topic.Publish(new { OrderId = 1000 + i, Total = i * 10.0 });
+                topic.Publish(new OrderEvent { MessageId = $"msg-{i:D3}", OrderId = 1000 + i, CustomerId = customers1[i - 1], Total = i * 10.0, PlacedAt = $"2026-05-21T10:{14 + i:D2}:00Z" });
 
             // email-service: 2 instances split the load (each handles 3 messages)
             // analytics-service: 1 instance gets all 6
@@ -197,9 +234,10 @@ namespace PubSubAndAsync
             Console.WriteLine("║  Scenario 2: 3 more messages — groups resume independently  ║");
             Console.WriteLine("╚════════════════════════════════════════════════════════════╝");
 
+            string[] customers2 = ["cust-14", "cust-56", "cust-29"];
             Console.WriteLine("\n  Publishing orders 7–9:");
             for (int i = 7; i <= 9; i++)
-                topic.Publish(new { OrderId = 1000 + i, Total = i * 10.0 });
+                topic.Publish(new OrderEvent { MessageId = $"msg-{i:D3}", OrderId = 1000 + i, CustomerId = customers2[i - 7], Total = i * 10.0, PlacedAt = $"2026-05-21T10:{14 + i:D2}:00Z" });
 
             // email-service picks up from offset 6 — not from 0
             topic.DrainGroup("email-service");
