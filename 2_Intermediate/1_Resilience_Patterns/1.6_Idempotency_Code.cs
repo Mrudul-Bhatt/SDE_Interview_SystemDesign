@@ -42,8 +42,8 @@ namespace ResiliencePatterns
     public class IdempotencyEntry
     {
         public IdempotencyStatus Status;
-        public string            Result;    // serialized response; null while Processing
-        public DateTime          ExpiresAt;
+        public string Result;    // serialized response; null while Processing
+        public DateTime ExpiresAt;
     }
 
     // -------------------------------------------------------------------------
@@ -64,9 +64,8 @@ namespace ResiliencePatterns
     // execute the payment.
     public class IdempotencyStore
     {
-        private readonly Dictionary<string, IdempotencyEntry> _store
-            = new Dictionary<string, IdempotencyEntry>();
-        private readonly object _lock = new object();
+        private readonly Dictionary<string, IdempotencyEntry> _store = [];
+        private readonly object _lock = new();
 
         public bool TryBegin(string key, int ttlMs)
         {
@@ -81,8 +80,8 @@ namespace ResiliencePatterns
                 // Key absent or expired — claim it with "processing" status.
                 _store[key] = new IdempotencyEntry
                 {
-                    Status    = IdempotencyStatus.Processing,
-                    Result    = null,
+                    Status = IdempotencyStatus.Processing,
+                    Result = null,
                     ExpiresAt = DateTime.UtcNow.AddMilliseconds(ttlMs)
                 };
                 return true;
@@ -122,10 +121,10 @@ namespace ResiliencePatterns
     // -------------------------------------------------------------------------
     public class PaymentResult
     {
-        public bool    Success;
-        public string  ChargeId;
+        public bool Success;
+        public string ChargeId;
         public decimal Amount;
-        public string  Message;
+        public string Message;
 
         public override string ToString() =>
             $"{{ success={Success}, chargeId={ChargeId}, amount=${Amount:F2}, msg=\"{Message}\" }}";
@@ -143,7 +142,7 @@ namespace ResiliencePatterns
     public class PaymentService
     {
         private readonly IdempotencyStore _store;
-        private          int              _chargeCounter = 0;
+        private int _chargeCounter = 0;
 
         // Short TTL for demo; production uses 24 hours (Stripe standard).
         private const int TtlMs = 2000;
@@ -153,10 +152,10 @@ namespace ResiliencePatterns
         public PaymentService(IdempotencyStore store) => _store = store;
 
         public (PaymentResult result, string outcome) ProcessPayment(
-            string  userId,
+            string userId,
             decimal amount,
-            string  idempotencyKey,
-            int     simulatedGatewayDelayMs = 20)
+            string idempotencyKey,
+            int simulatedGatewayDelayMs = 20)
         {
             // ── Step 1: check whether we have already seen this key ───────────
             IdempotencyEntry existing = _store.TryGet(idempotencyKey);
@@ -187,12 +186,12 @@ namespace ResiliencePatterns
             Thread.Sleep(simulatedGatewayDelayMs); // simulate network latency
             int chargeNum = Interlocked.Increment(ref _chargeCounter);
 
-            PaymentResult result = new PaymentResult
+            PaymentResult result = new()
             {
-                Success  = true,
+                Success = true,
                 ChargeId = $"ch_{chargeNum:D4}",
-                Amount   = amount,
-                Message  = $"Charged ${amount:F2} to {userId}"
+                Amount = amount,
+                Message = $"Charged ${amount:F2} to {userId}"
             };
 
             // ── Step 4: store result so every subsequent retry gets the cache ─
@@ -209,10 +208,10 @@ namespace ResiliencePatterns
             string[] p = s.Split('|');
             return new PaymentResult
             {
-                Success  = bool.Parse(p[0]),
+                Success = bool.Parse(p[0]),
                 ChargeId = p[1],
-                Amount   = decimal.Parse(p[2]),
-                Message  = p[3]
+                Amount = decimal.Parse(p[2]),
+                Message = p[3]
             };
         }
     }
@@ -224,7 +223,7 @@ namespace ResiliencePatterns
     {
         public static void Main()
         {
-            var store   = new IdempotencyStore();
+            var store = new IdempotencyStore();
             var payment = new PaymentService(store);
 
             // =================================================================
@@ -274,8 +273,8 @@ namespace ResiliencePatterns
 
             string key3 = Guid.NewGuid().ToString();
 
-            string  thread2Outcome = null;
-            string  thread1Outcome = null;
+            string thread2Outcome = null;
+            string thread1Outcome = null;
             PaymentResult thread2Result = null;
 
             // Thread 1: slow gateway (150ms) to give Thread 2 time to arrive
@@ -291,7 +290,7 @@ namespace ResiliencePatterns
                 Thread.Sleep(30); // let Thread 1 claim the key first
                 var (res, out3) = payment.ProcessPayment("user-7", 50.00m, key3);
                 thread2Outcome = out3;
-                thread2Result  = res;
+                thread2Result = res;
             });
 
             t1.Start();
