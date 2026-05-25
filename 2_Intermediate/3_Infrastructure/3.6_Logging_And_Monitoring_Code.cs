@@ -35,10 +35,10 @@ namespace Infrastructure
     {
         public DateTime Timestamp;
         public LogLevel Level;
-        public string   Service;
-        public string   TraceId;
-        public string   SpanId;
-        public string   Message;
+        public string Service;
+        public string TraceId;
+        public string SpanId;
+        public string Message;
         public Dictionary<string, object> Fields = new Dictionary<string, object>();
 
         // Serialize as compact JSON for log aggregators (Elasticsearch, Loki).
@@ -50,7 +50,7 @@ namespace Infrastructure
             sb.Append($",\"level\":\"{Level.ToString().ToUpper()}\"");
             sb.Append($",\"service\":\"{Service}\"");
             if (!string.IsNullOrEmpty(TraceId)) sb.Append($",\"traceId\":\"{TraceId}\"");
-            if (!string.IsNullOrEmpty(SpanId))  sb.Append($",\"spanId\":\"{SpanId}\"");
+            if (!string.IsNullOrEmpty(SpanId)) sb.Append($",\"spanId\":\"{SpanId}\"");
             sb.Append($",\"msg\":\"{Message}\"");
             foreach (var f in Fields)
                 sb.Append($",\"{f.Key}\":{Serialize(f.Value)}");
@@ -60,7 +60,7 @@ namespace Infrastructure
 
         private static string Serialize(object v) =>
             v is string s ? $"\"{s}\"" :
-            v is bool   b ? (b ? "true" : "false") :
+            v is bool b ? (b ? "true" : "false") :
             v?.ToString() ?? "null";
     }
 
@@ -87,7 +87,7 @@ namespace Infrastructure
     // Min-level filter: DEBUG/TRACE suppressed in production.
     public class StructuredLogger
     {
-        private readonly string   _service;
+        private readonly string _service;
         private readonly LogLevel _minLevel;
         private readonly List<LogEntry> _sink = new List<LogEntry>(); // in-memory log store
 
@@ -99,7 +99,7 @@ namespace Infrastructure
 
         public StructuredLogger(string service, LogLevel minLevel = LogLevel.Info)
         {
-            _service  = service;
+            _service = service;
             _minLevel = minLevel;
         }
 
@@ -110,18 +110,18 @@ namespace Infrastructure
             var entry = new LogEntry
             {
                 Timestamp = DateTime.UtcNow,
-                Level     = level,
-                Service   = _service,
-                TraceId   = CurrentTraceId,
-                SpanId    = CurrentSpanId,
-                Message   = message,
-                Fields    = Redactor.Redact(fields ?? new Dictionary<string, object>())
+                Level = level,
+                Service = _service,
+                TraceId = CurrentTraceId,
+                SpanId = CurrentSpanId,
+                Message = message,
+                Fields = Redactor.Redact(fields ?? new Dictionary<string, object>())
             };
             _sink.Add(entry);
         }
 
-        public void Info (string msg, Dictionary<string, object> f = null) => Log(LogLevel.Info,  msg, f);
-        public void Warn (string msg, Dictionary<string, object> f = null) => Log(LogLevel.Warn,  msg, f);
+        public void Info(string msg, Dictionary<string, object> f = null) => Log(LogLevel.Info, msg, f);
+        public void Warn(string msg, Dictionary<string, object> f = null) => Log(LogLevel.Warn, msg, f);
         public void Error(string msg, Dictionary<string, object> f = null) => Log(LogLevel.Error, msg, f);
         public void Debug(string msg, Dictionary<string, object> f = null) => Log(LogLevel.Debug, msg, f);
 
@@ -129,7 +129,7 @@ namespace Infrastructure
         public IEnumerable<LogEntry> Query(LogLevel? level = null, string traceId = null)
         {
             IEnumerable<LogEntry> q = _sink;
-            if (level   != null) q = q.Where(e => e.Level   == level);
+            if (level != null) q = q.Where(e => e.Level == level);
             if (traceId != null) q = q.Where(e => e.TraceId == traceId);
             return q;
         }
@@ -144,10 +144,10 @@ namespace Infrastructure
     public class Counter
     {
         public string Name { get; }
-        private long  _value;
+        private long _value;
         public Counter(string name) => Name = name;
-        public void   Increment(long by = 1) => Interlocked.Add(ref _value, by);
-        public long   Value => Interlocked.Read(ref _value);
+        public void Increment(long by = 1) => Interlocked.Add(ref _value, by);
+        public long Value => Interlocked.Read(ref _value);
     }
 
     // Gauge: current value; can go up or down.
@@ -158,9 +158,9 @@ namespace Infrastructure
         private double _value;
         private readonly object _lock = new object();
         public Gauge(string name) => Name = name;
-        public void   Set(double v) { lock (_lock) _value = v; }
-        public void   Inc(double by = 1) { lock (_lock) _value += by; }
-        public void   Dec(double by = 1) { lock (_lock) _value -= by; }
+        public void Set(double v) { lock (_lock) _value = v; }
+        public void Inc(double by = 1) { lock (_lock) _value += by; }
+        public void Dec(double by = 1) { lock (_lock) _value -= by; }
         public double Value { get { lock (_lock) return _value; } }
     }
 
@@ -170,13 +170,13 @@ namespace Infrastructure
     public class Histogram
     {
         public string Name { get; }
-        private readonly List<double>    _observations = new List<double>();
-        private readonly object          _lock         = new object();
-        private readonly double[]        _buckets;     // upper bounds in ms
+        private readonly List<double> _observations = new List<double>();
+        private readonly object _lock = new object();
+        private readonly double[] _buckets;     // upper bounds in ms
 
         public Histogram(string name, double[] buckets = null)
         {
-            Name     = name;
+            Name = name;
             _buckets = buckets ?? new[] { 5.0, 10, 25, 50, 100, 250, 500, 1000, 2000 };
         }
 
@@ -188,13 +188,13 @@ namespace Infrastructure
             {
                 if (_observations.Count == 0) return 0;
                 var sorted = _observations.OrderBy(v => v).ToList();
-                int idx    = (int)Math.Ceiling(p * sorted.Count) - 1;
+                int idx = (int)Math.Ceiling(p * sorted.Count) - 1;
                 return sorted[Math.Max(0, idx)];
             }
         }
 
-        public long   Count { get { lock (_lock) return _observations.Count; } }
-        public double Sum   { get { lock (_lock) return _observations.Sum(); } }
+        public long Count { get { lock (_lock) return _observations.Count; } }
+        public double Sum { get { lock (_lock) return _observations.Sum(); } }
 
         // Bucket counts (for histogram bar charts in Grafana).
         public Dictionary<string, long> BucketCounts()
@@ -216,12 +216,12 @@ namespace Infrastructure
     // In production: Prometheus client library; metrics exposed at GET /metrics.
     public class MetricsRegistry
     {
-        private readonly Dictionary<string, Counter>   _counters   = new Dictionary<string, Counter>();
-        private readonly Dictionary<string, Gauge>     _gauges     = new Dictionary<string, Gauge>();
+        private readonly Dictionary<string, Counter> _counters = new Dictionary<string, Counter>();
+        private readonly Dictionary<string, Gauge> _gauges = new Dictionary<string, Gauge>();
         private readonly Dictionary<string, Histogram> _histograms = new Dictionary<string, Histogram>();
 
-        public Counter   Counter  (string name) => _counters  .GetOrAdd(name, n => new Counter(n));
-        public Gauge     Gauge    (string name) => _gauges    .GetOrAdd(name, n => new Gauge(n));
+        public Counter Counter(string name) => _counters.GetOrAdd(name, n => new Counter(n));
+        public Gauge Gauge(string name) => _gauges.GetOrAdd(name, n => new Gauge(n));
         public Histogram Histogram(string name) => _histograms.GetOrAdd(name, n => new Histogram(n));
 
         public void PrintSummary(string service)
@@ -256,21 +256,21 @@ namespace Infrastructure
 
     public class Span
     {
-        public string   TraceId;
-        public string   SpanId;
-        public string   ParentSpanId;
-        public string   ServiceName;
-        public string   OperationName;
+        public string TraceId;
+        public string SpanId;
+        public string ParentSpanId;
+        public string ServiceName;
+        public string OperationName;
         public DateTime StartTime;
         public DateTime EndTime;
-        public bool     IsFinished;
+        public bool IsFinished;
         public Dictionary<string, string> Tags = new Dictionary<string, string>();
 
         public double DurationMs => (EndTime - StartTime).TotalMilliseconds;
 
         public void Finish()
         {
-            EndTime    = DateTime.UtcNow;
+            EndTime = DateTime.UtcNow;
             IsFinished = true;
         }
 
@@ -281,8 +281,8 @@ namespace Infrastructure
     // Propagates context via TraceContext (simulates W3C traceparent header).
     public class Tracer
     {
-        private readonly string       _service;
-        private readonly List<Span>   _spans = new List<Span>();
+        private readonly string _service;
+        private readonly List<Span> _spans = new List<Span>();
 
         public Tracer(string service) => _service = service;
 
@@ -291,12 +291,12 @@ namespace Infrastructure
             string tid = traceId ?? Guid.NewGuid().ToString("N")[..16];
             var span = new Span
             {
-                TraceId       = tid,
-                SpanId        = Guid.NewGuid().ToString("N")[..8],
-                ParentSpanId  = parentSpanId,
-                ServiceName   = _service,
+                TraceId = tid,
+                SpanId = Guid.NewGuid().ToString("N")[..8],
+                ParentSpanId = parentSpanId,
+                ServiceName = _service,
                 OperationName = operation,
-                StartTime     = DateTime.UtcNow
+                StartTime = DateTime.UtcNow
             };
             lock (_spans) _spans.Add(span);
             return span;
@@ -333,25 +333,25 @@ namespace Infrastructure
 
     public class AlertRule
     {
-        public string          Name;
-        public string          Description;
-        public Func<bool>      Condition;    // returns true when alert should fire
-        public string          Severity;     // "critical" | "warning"
-        public string          Runbook;      // link to remediation steps
+        public string Name;
+        public string Description;
+        public Func<bool> Condition;    // returns true when alert should fire
+        public string Severity;     // "critical" | "warning"
+        public string Runbook;      // link to remediation steps
     }
 
     public class AlertFiring
     {
-        public string   Rule;
-        public string   Severity;
+        public string Rule;
+        public string Severity;
         public DateTime FiredAt;
-        public string   Description;
+        public string Description;
     }
 
     public class AlertEngine
     {
-        private readonly List<AlertRule>   _rules    = new List<AlertRule>();
-        private readonly List<AlertFiring> _fired    = new List<AlertFiring>();
+        private readonly List<AlertRule> _rules = new List<AlertRule>();
+        private readonly List<AlertFiring> _fired = new List<AlertFiring>();
 
         public AlertEngine Register(AlertRule rule) { _rules.Add(rule); return this; }
 
@@ -367,9 +367,9 @@ namespace Infrastructure
                     {
                         var alert = new AlertFiring
                         {
-                            Rule        = rule.Name,
-                            Severity    = rule.Severity,
-                            FiredAt     = DateTime.UtcNow,
+                            Rule = rule.Name,
+                            Severity = rule.Severity,
+                            FiredAt = DateTime.UtcNow,
                             Description = rule.Description
                         };
                         _fired.Add(alert);
@@ -404,24 +404,24 @@ namespace Infrastructure
             var logger = new StructuredLogger("order-service", minLevel: LogLevel.Info);
 
             logger.Debug("Computing cart total", new Dictionary<string, object>
-                { ["cartId"] = "cart-55" }); // filtered — below INFO
+            { ["cartId"] = "cart-55" }); // filtered — below INFO
 
             logger.Info("Order placed", new Dictionary<string, object>
             {
                 ["orderId"] = "order-301",
-                ["userId"]  = 42,
-                ["total"]   = 149.99
+                ["userId"] = 42,
+                ["total"] = 149.99
             });
 
             logger.Warn("Payment retry", new Dictionary<string, object>
-                { ["attempt"] = 2, ["maxAttempts"] = 3 });
+            { ["attempt"] = 2, ["maxAttempts"] = 3 });
 
             logger.Error("Payment failed", new Dictionary<string, object>
             {
-                ["userId"]     = 42,
+                ["userId"] = 42,
                 ["cardNumber"] = "4111111111111111", // ← PII — will be redacted
-                ["password"]   = "secret123",         // ← PII — will be redacted
-                ["error"]      = "card_declined"
+                ["password"] = "secret123",         // ← PII — will be redacted
+                ["error"] = "card_declined"
             });
 
             Console.WriteLine("  All log entries (JSON — as they arrive in Elasticsearch):");
@@ -445,8 +445,8 @@ namespace Infrastructure
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 
             var gatewayLogger = new StructuredLogger("api-gateway");
-            var orderLogger   = new StructuredLogger("order-service");
-            var dbLogger      = new StructuredLogger("db-proxy");
+            var orderLogger = new StructuredLogger("order-service");
+            var dbLogger = new StructuredLogger("db-proxy");
 
             // Step 1: API Gateway creates the root span and injects traceId.
             Span rootSpan = SharedTracer.StartSpan("HTTP GET /api/orders/301");
@@ -454,10 +454,10 @@ namespace Infrastructure
 
             // Set thread-static context so all loggers in this "request" share traceId.
             StructuredLogger.CurrentTraceId = traceId;
-            StructuredLogger.CurrentSpanId  = rootSpan.SpanId;
+            StructuredLogger.CurrentSpanId = rootSpan.SpanId;
 
             gatewayLogger.Info("Request received", new Dictionary<string, object>
-                { ["method"] = "GET", ["path"] = "/api/orders/301", ["clientIp"] = "1.2.3.4" });
+            { ["method"] = "GET", ["path"] = "/api/orders/301", ["clientIp"] = "1.2.3.4" });
 
             Thread.Sleep(5);
 
@@ -471,9 +471,9 @@ namespace Infrastructure
             // Step 3: DB query — another child span (the bottleneck).
             Span dbSpan = SharedTracer.StartSpan("SELECT orders WHERE id=301", traceId, orderSpan.SpanId);
             StructuredLogger.CurrentTraceId = traceId;
-            StructuredLogger.CurrentSpanId  = dbSpan.SpanId;
+            StructuredLogger.CurrentSpanId = dbSpan.SpanId;
             dbLogger.Info("Executing query", new Dictionary<string, object>
-                { ["table"] = "orders", ["index"] = "idx_orders_id" });
+            { ["table"] = "orders", ["index"] = "idx_orders_id" });
 
             Thread.Sleep(120); // ← slow DB query (missing index simulation)
             dbSpan.SetTag("db.rows_examined", "450000");
@@ -508,10 +508,10 @@ namespace Infrastructure
 
             var metrics = new MetricsRegistry();
 
-            Counter   reqTotal    = metrics.Counter  ("http_requests_total");
-            Counter   errTotal    = metrics.Counter  ("http_errors_total");
-            Gauge     activeConns = metrics.Gauge    ("http_active_connections");
-            Histogram latency     = metrics.Histogram("http_request_duration_ms");
+            Counter reqTotal = metrics.Counter("http_requests_total");
+            Counter errTotal = metrics.Counter("http_errors_total");
+            Gauge activeConns = metrics.Gauge("http_active_connections");
+            Histogram latency = metrics.Histogram("http_request_duration_ms");
 
             // Simulated latency distribution: mostly fast, two slow outliers.
             double[] simulatedLatencies = {
@@ -563,27 +563,27 @@ namespace Infrastructure
             alerts
                 .Register(new AlertRule
                 {
-                    Name        = "HighErrorRate",
-                    Severity    = "critical",
+                    Name = "HighErrorRate",
+                    Severity = "critical",
                     Description = $"Error rate {errorRate:F1}% > 5% threshold",
-                    Runbook     = "https://runbooks/high-error-rate",
-                    Condition   = () => errTotal.Value * 100.0 / reqTotal.Value > 5.0
+                    Runbook = "https://runbooks/high-error-rate",
+                    Condition = () => errTotal.Value * 100.0 / reqTotal.Value > 5.0
                 })
                 .Register(new AlertRule
                 {
-                    Name        = "P99LatencySLOBreach",
-                    Severity    = "critical",
+                    Name = "P99LatencySLOBreach",
+                    Severity = "critical",
                     Description = $"p99={latency.Percentile(0.99):F0}ms > 500ms SLO",
-                    Runbook     = "https://runbooks/latency-slo",
-                    Condition   = () => latency.Percentile(0.99) > 500
+                    Runbook = "https://runbooks/latency-slo",
+                    Condition = () => latency.Percentile(0.99) > 500
                 })
                 .Register(new AlertRule
                 {
-                    Name        = "HighActiveConnections",
-                    Severity    = "warning",
+                    Name = "HighActiveConnections",
+                    Severity = "warning",
                     Description = $"Active connections = {activeConns.Value} > 1000",
-                    Runbook     = "https://runbooks/connection-pool",
-                    Condition   = () => activeConns.Value > 1000 // not breached
+                    Runbook = "https://runbooks/connection-pool",
+                    Condition = () => activeConns.Value > 1000 // not breached
                 });
 
             List<AlertFiring> fired = alerts.Evaluate();

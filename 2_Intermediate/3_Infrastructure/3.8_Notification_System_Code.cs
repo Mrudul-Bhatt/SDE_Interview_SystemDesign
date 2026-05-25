@@ -21,8 +21,8 @@ namespace Infrastructure
     public enum NotificationPriority
     {
         Critical = 0,   // OTP, fraud alerts — bypasses rate limit
-        High     = 1,   // order confirmed, payment failed
-        Normal   = 2,   // shipping update, receipt
+        High = 1,   // order confirmed, payment failed
+        Normal = 2,   // shipping update, receipt
         Marketing = 3   // promotions, weekly digest
     }
 
@@ -33,10 +33,10 @@ namespace Infrastructure
     // What the producer (OrderService, PaymentService, etc.) sends
     public class NotificationRequest
     {
-        public string          RequestId   { get; set; }   // idempotency key provided by producer
-        public int             UserId      { get; set; }
-        public string          TemplateId  { get; set; }
-        public string          ContextId   { get; set; }   // orderId / paymentId / etc.
+        public string RequestId { get; set; }   // idempotency key provided by producer
+        public int UserId { get; set; }
+        public string TemplateId { get; set; }
+        public string ContextId { get; set; }   // orderId / paymentId / etc.
         public NotificationPriority Priority { get; set; }
         public List<NotificationChannel> Channels { get; set; } // desired channels
         public Dictionary<string, string> Variables { get; set; } // template vars
@@ -46,15 +46,15 @@ namespace Infrastructure
 
     public class DeliveryRecord
     {
-        public string              Id         { get; set; }
-        public int                 UserId     { get; set; }
-        public NotificationChannel Channel    { get; set; }
-        public string              TemplateId { get; set; }
-        public DeliveryStatus      Status     { get; set; }
-        public string              StatusNote { get; set; }
-        public DateTime            CreatedAt  { get; set; }
-        public DateTime            UpdatedAt  { get; set; }
-        public int                 Attempts   { get; set; }
+        public string Id { get; set; }
+        public int UserId { get; set; }
+        public NotificationChannel Channel { get; set; }
+        public string TemplateId { get; set; }
+        public DeliveryStatus Status { get; set; }
+        public string StatusNote { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+        public int Attempts { get; set; }
     }
 
     // ── TemplateEngine ─────────────────────────────────────────────────────────
@@ -64,20 +64,20 @@ namespace Infrastructure
     {
         private readonly Dictionary<string, (string Subject, string Body)> _templates
             = new Dictionary<string, (string, string)>
-        {
-            ["order_confirmed"] = (
+            {
+                ["order_confirmed"] = (
                 "Your order {{orderId}} is confirmed!",
                 "Hi {{firstName}}, your order of {{total}} ships by {{estimatedDate}}."),
-            ["payment_failed"] = (
+                ["payment_failed"] = (
                 "Action required: payment failed for order {{orderId}}",
                 "Hi {{firstName}}, we couldn't charge {{total}}. Please update your payment method."),
-            ["otp"] = (
+                ["otp"] = (
                 "Your verification code",
                 "Your one-time code is {{code}}. Expires in 5 minutes. Do not share."),
-            ["promo"] = (
+                ["promo"] = (
                 "{{promoTitle}} — limited time offer",
                 "Hi {{firstName}}, {{promoBody}}"),
-        };
+            };
 
         public (string Subject, string Body) Render(
             string templateId, Dictionary<string, string> vars)
@@ -86,7 +86,7 @@ namespace Infrastructure
                 throw new ArgumentException($"Unknown template: {templateId}");
 
             string subject = Substitute(tpl.Subject, vars);
-            string body    = Substitute(tpl.Body,    vars);
+            string body = Substitute(tpl.Body, vars);
             return (subject, body);
         }
 
@@ -180,7 +180,7 @@ namespace Infrastructure
     {
         private class Bucket
         {
-            public double   Tokens    { get; set; }
+            public double Tokens { get; set; }
             public DateTime LastRefill { get; set; }
         }
 
@@ -192,7 +192,7 @@ namespace Infrastructure
         // Example: maxTokens=10, refillPeriod=1h → 10 per hour
         public RateLimiter(double maxTokens = 10, TimeSpan? refillPeriod = null)
         {
-            _maxTokens   = maxTokens;
+            _maxTokens = maxTokens;
             TimeSpan period = refillPeriod ?? TimeSpan.FromHours(1);
             _refillPerMs = maxTokens / period.TotalMilliseconds;
         }
@@ -214,7 +214,7 @@ namespace Infrastructure
 
                 // refill tokens based on elapsed time
                 double elapsed = (DateTime.UtcNow - bucket.LastRefill).TotalMilliseconds;
-                bucket.Tokens    = Math.Min(_maxTokens, bucket.Tokens + elapsed * _refillPerMs);
+                bucket.Tokens = Math.Min(_maxTokens, bucket.Tokens + elapsed * _refillPerMs);
                 bucket.LastRefill = DateTime.UtcNow;
 
                 if (bucket.Tokens >= 1.0)
@@ -305,13 +305,13 @@ namespace Infrastructure
         {
             var r = new DeliveryRecord
             {
-                Id         = $"notif-{Interlocked.Increment(ref _seq):D4}",
-                UserId     = userId,
-                Channel    = channel,
+                Id = $"notif-{Interlocked.Increment(ref _seq):D4}",
+                UserId = userId,
+                Channel = channel,
                 TemplateId = templateId,
-                Status     = DeliveryStatus.Queued,
-                CreatedAt  = DateTime.UtcNow,
-                UpdatedAt  = DateTime.UtcNow,
+                Status = DeliveryStatus.Queued,
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
             };
             lock (_records) _records.Add(r);
             return r;
@@ -319,9 +319,9 @@ namespace Infrastructure
 
         public void Update(DeliveryRecord r, DeliveryStatus status, string note = null)
         {
-            r.Status     = status;
+            r.Status = status;
             r.StatusNote = note;
-            r.UpdatedAt  = DateTime.UtcNow;
+            r.UpdatedAt = DateTime.UtcNow;
         }
 
         public IReadOnlyList<DeliveryRecord> QueryByUser(int userId)
@@ -341,28 +341,28 @@ namespace Infrastructure
 
     public class NotificationService
     {
-        private readonly TemplateEngine           _templates;
-        private readonly UserPreferencesStore     _prefs;
-        private readonly DeduplicationStore       _dedup;
-        private readonly RateLimiter              _rateLimiter;
+        private readonly TemplateEngine _templates;
+        private readonly UserPreferencesStore _prefs;
+        private readonly DeduplicationStore _dedup;
+        private readonly RateLimiter _rateLimiter;
         private readonly Dictionary<NotificationChannel, IChannelAdapter> _adapters;
-        private readonly DeliveryLog              _log;
+        private readonly DeliveryLog _log;
         private const int MaxRetries = 3;
 
         public NotificationService(
-            TemplateEngine           templates,
-            UserPreferencesStore     prefs,
-            DeduplicationStore       dedup,
-            RateLimiter              rateLimiter,
+            TemplateEngine templates,
+            UserPreferencesStore prefs,
+            DeduplicationStore dedup,
+            RateLimiter rateLimiter,
             IEnumerable<IChannelAdapter> adapters,
-            DeliveryLog              log)
+            DeliveryLog log)
         {
-            _templates   = templates;
-            _prefs       = prefs;
-            _dedup       = dedup;
+            _templates = templates;
+            _prefs = prefs;
+            _dedup = dedup;
             _rateLimiter = rateLimiter;
-            _log         = log;
-            _adapters    = adapters.ToDictionary(a => a.Channel);
+            _log = log;
+            _adapters = adapters.ToDictionary(a => a.Channel);
         }
 
         // Fan-out: send to all requested channels in parallel
@@ -469,15 +469,15 @@ namespace Infrastructure
         static void Main(string[] args)
         {
             // ── shared infrastructure ──────────────────────────────────────────
-            var templates   = new TemplateEngine();
-            var prefs       = new UserPreferencesStore();
-            var dedup       = new DeduplicationStore(TimeSpan.FromMinutes(5));
+            var templates = new TemplateEngine();
+            var prefs = new UserPreferencesStore();
+            var dedup = new DeduplicationStore(TimeSpan.FromMinutes(5));
             var rateLimiter = new RateLimiter(maxTokens: 3, refillPeriod: TimeSpan.FromHours(1));
             var deliveryLog = new DeliveryLog();
 
             var emailAdapter = new EmailAdapter();
-            var smsAdapter   = new SmsAdapter();
-            var pushAdapter  = new PushAdapter();
+            var smsAdapter = new SmsAdapter();
+            var pushAdapter = new PushAdapter();
             var inAppAdapter = new InAppAdapter();
 
             var svc = new NotificationService(
@@ -488,14 +488,14 @@ namespace Infrastructure
             // ── set up user preferences ────────────────────────────────────────
             // user 42: email+push enabled, SMS opted out
             prefs.Set(42, NotificationChannel.Email, true);
-            prefs.Set(42, NotificationChannel.Push,  true);
-            prefs.Set(42, NotificationChannel.Sms,   false);
+            prefs.Set(42, NotificationChannel.Push, true);
+            prefs.Set(42, NotificationChannel.Sms, false);
             prefs.Set(42, NotificationChannel.InApp, true);
 
             // user 99: all channels enabled
             prefs.Set(99, NotificationChannel.Email, true);
-            prefs.Set(99, NotificationChannel.Sms,   true);
-            prefs.Set(99, NotificationChannel.Push,  true);
+            prefs.Set(99, NotificationChannel.Sms, true);
+            prefs.Set(99, NotificationChannel.Push, true);
 
             // ══════════════════════════════════════════════════════════════════
             Banner("Scenario 1: Multi-channel fan-out — order confirmed");
@@ -503,19 +503,19 @@ namespace Infrastructure
             // Order service publishes one event; notification service fans out to all channels
             svc.Send(new NotificationRequest
             {
-                RequestId  = "req-001",
-                UserId     = 42,
+                RequestId = "req-001",
+                UserId = 42,
                 TemplateId = "order_confirmed",
-                ContextId  = "ORD-301",
-                Priority   = NotificationPriority.High,
-                Channels   = new List<NotificationChannel>
+                ContextId = "ORD-301",
+                Priority = NotificationPriority.High,
+                Channels = new List<NotificationChannel>
                     { NotificationChannel.Email, NotificationChannel.Sms,
                       NotificationChannel.Push,  NotificationChannel.InApp },
-                Variables  = new Dictionary<string, string>
+                Variables = new Dictionary<string, string>
                 {
-                    ["firstName"]     = "Alice",
-                    ["orderId"]       = "ORD-301",
-                    ["total"]         = "$149.99",
+                    ["firstName"] = "Alice",
+                    ["orderId"] = "ORD-301",
+                    ["total"] = "$149.99",
                     ["estimatedDate"] = "Mar 20"
                 }
             });
@@ -529,36 +529,36 @@ namespace Infrastructure
             Console.WriteLine("\n  First send (new):");
             svc.Send(new NotificationRequest
             {
-                RequestId  = "req-002",
-                UserId     = 99,
+                RequestId = "req-002",
+                UserId = 99,
                 TemplateId = "payment_failed",
-                ContextId  = "PAY-55",
-                Priority   = NotificationPriority.High,
-                Channels   = new List<NotificationChannel>
+                ContextId = "PAY-55",
+                Priority = NotificationPriority.High,
+                Channels = new List<NotificationChannel>
                     { NotificationChannel.Email, NotificationChannel.Push },
-                Variables  = new Dictionary<string, string>
+                Variables = new Dictionary<string, string>
                 {
                     ["firstName"] = "Bob",
-                    ["orderId"]   = "ORD-302",
-                    ["total"]     = "$79.00"
+                    ["orderId"] = "ORD-302",
+                    ["total"] = "$79.00"
                 }
             });
 
             Console.WriteLine("\n  Second send (producer retry — should be deduped):");
             svc.Send(new NotificationRequest
             {
-                RequestId  = "req-002",        // same contextId → same dedup key
-                UserId     = 99,
+                RequestId = "req-002",        // same contextId → same dedup key
+                UserId = 99,
                 TemplateId = "payment_failed",
-                ContextId  = "PAY-55",         // same → duplicate
-                Priority   = NotificationPriority.High,
-                Channels   = new List<NotificationChannel>
+                ContextId = "PAY-55",         // same → duplicate
+                Priority = NotificationPriority.High,
+                Channels = new List<NotificationChannel>
                     { NotificationChannel.Email, NotificationChannel.Push },
-                Variables  = new Dictionary<string, string>
+                Variables = new Dictionary<string, string>
                 {
                     ["firstName"] = "Bob",
-                    ["orderId"]   = "ORD-302",
-                    ["total"]     = "$79.00"
+                    ["orderId"] = "ORD-302",
+                    ["total"] = "$79.00"
                 }
             });
 
@@ -573,17 +573,17 @@ namespace Infrastructure
                 Console.WriteLine($"\n  Promo send #{i}:");
                 svc.Send(new NotificationRequest
                 {
-                    RequestId  = $"promo-{i}",
-                    UserId     = 42,
+                    RequestId = $"promo-{i}",
+                    UserId = 42,
                     TemplateId = "promo",
-                    ContextId  = $"PROMO-{i}",    // different contextId → passes dedup
-                    Priority   = NotificationPriority.Marketing,
-                    Channels   = new List<NotificationChannel> { NotificationChannel.Email },
-                    Variables  = new Dictionary<string, string>
+                    ContextId = $"PROMO-{i}",    // different contextId → passes dedup
+                    Priority = NotificationPriority.Marketing,
+                    Channels = new List<NotificationChannel> { NotificationChannel.Email },
+                    Variables = new Dictionary<string, string>
                     {
-                        ["firstName"]  = "Alice",
+                        ["firstName"] = "Alice",
                         ["promoTitle"] = $"Spring Sale #{i}",
-                        ["promoBody"]  = "50% off all items this weekend!"
+                        ["promoBody"] = "50% off all items this weekend!"
                     }
                 });
             }
@@ -595,13 +595,13 @@ namespace Infrastructure
             Console.WriteLine("\n  OTP (CRITICAL) after rate limit exhausted:");
             svc.Send(new NotificationRequest
             {
-                RequestId  = "otp-001",
-                UserId     = 42,
+                RequestId = "otp-001",
+                UserId = 42,
                 TemplateId = "otp",
-                ContextId  = "OTP-SESSION-789",
-                Priority   = NotificationPriority.Critical,
-                Channels   = new List<NotificationChannel> { NotificationChannel.Email },
-                Variables  = new Dictionary<string, string>
+                ContextId = "OTP-SESSION-789",
+                Priority = NotificationPriority.Critical,
+                Channels = new List<NotificationChannel> { NotificationChannel.Email },
+                Variables = new Dictionary<string, string>
                 {
                     ["code"] = "482931"
                 }
@@ -615,17 +615,17 @@ namespace Infrastructure
             Console.WriteLine("\n  Sending order_confirmed with transient SMTP failure:");
             svc.Send(new NotificationRequest
             {
-                RequestId  = "req-retry-001",
-                UserId     = 99,
+                RequestId = "req-retry-001",
+                UserId = 99,
                 TemplateId = "order_confirmed",
-                ContextId  = "ORD-500",
-                Priority   = NotificationPriority.High,
-                Channels   = new List<NotificationChannel> { NotificationChannel.Email },
-                Variables  = new Dictionary<string, string>
+                ContextId = "ORD-500",
+                Priority = NotificationPriority.High,
+                Channels = new List<NotificationChannel> { NotificationChannel.Email },
+                Variables = new Dictionary<string, string>
                 {
-                    ["firstName"]     = "Bob",
-                    ["orderId"]       = "ORD-500",
-                    ["total"]         = "$200.00",
+                    ["firstName"] = "Bob",
+                    ["orderId"] = "ORD-500",
+                    ["total"] = "$200.00",
                     ["estimatedDate"] = "Mar 25"
                 }
             });

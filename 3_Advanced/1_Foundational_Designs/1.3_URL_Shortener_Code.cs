@@ -21,7 +21,7 @@ namespace AdvancedDesigns
     {
         private const string Alphabet =
             "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
-        private const int Base   = 62;
+        private const int Base = 62;
         private const int Length = 7; // fixed-width codes
 
         public static string Encode(long id)
@@ -58,14 +58,14 @@ namespace AdvancedDesigns
 
     public class UrlRecord
     {
-        public long     Id         { get; set; }
-        public string   ShortCode  { get; set; }
-        public string   LongUrl    { get; set; }
-        public string   CreatedBy  { get; set; }
-        public DateTime CreatedAt  { get; set; }
+        public long Id { get; set; }
+        public string ShortCode { get; set; }
+        public string LongUrl { get; set; }
+        public string CreatedBy { get; set; }
+        public DateTime CreatedAt { get; set; }
         public DateTime? ExpiresAt { get; set; } // null = never expires
-        public bool     IsActive   { get; set; } = true;
-        public bool     IsCustom   { get; set; } // true for custom aliases
+        public bool IsActive { get; set; } = true;
+        public bool IsCustom { get; set; } // true for custom aliases
 
         public bool IsExpired =>
             ExpiresAt.HasValue && DateTime.UtcNow >= ExpiresAt.Value;
@@ -81,14 +81,14 @@ namespace AdvancedDesigns
         private readonly Dictionary<TKey, LinkedListNode<(TKey Key, TValue Value)>> _map;
         private readonly LinkedList<(TKey Key, TValue Value)> _list;
 
-        public int Hits   { get; private set; }
+        public int Hits { get; private set; }
         public int Misses { get; private set; }
 
         public LruCache(int capacity)
         {
             _capacity = capacity;
-            _map      = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity);
-            _list     = new LinkedList<(TKey, TValue)>();
+            _map = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity);
+            _list = new LinkedList<(TKey, TValue)>();
         }
 
         public bool TryGet(TKey key, out TValue value)
@@ -145,8 +145,8 @@ namespace AdvancedDesigns
     // Simulates Redis counters + ClickHouse aggregation.
     public class ClickAnalytics
     {
-        private readonly Dictionary<string, long>                       _total  = new Dictionary<string, long>();
-        private readonly Dictionary<string, Dictionary<string, long>>   _byCountry = new Dictionary<string, Dictionary<string, long>>();
+        private readonly Dictionary<string, long> _total = new Dictionary<string, long>();
+        private readonly Dictionary<string, Dictionary<string, long>> _byCountry = new Dictionary<string, Dictionary<string, long>>();
         private readonly object _lock = new object();
 
         public void Record(string shortCode, string country = "US")
@@ -202,10 +202,10 @@ namespace AdvancedDesigns
 
     public class RedirectResult
     {
-        public int    StatusCode { get; set; }  // 302, 404, 410
-        public string LongUrl    { get; set; }
-        public string Note       { get; set; }
-        public bool   FromCache  { get; set; }
+        public int StatusCode { get; set; }  // 302, 404, 410
+        public string LongUrl { get; set; }
+        public string Note { get; set; }
+        public bool FromCache { get; set; }
     }
 
     // ── UrlShortenerService ───────────────────────────────────────────────────
@@ -217,17 +217,17 @@ namespace AdvancedDesigns
             StringComparer.OrdinalIgnoreCase)
         { "api", "admin", "stats", "health", "login", "shorten", "dashboard" };
 
-        private readonly IdGenerator    _idGen;
-        private readonly UrlRepository  _db;
+        private readonly IdGenerator _idGen;
+        private readonly UrlRepository _db;
         private readonly LruCache<string, UrlRecord> _cache;
         private readonly ClickAnalytics _analytics;
         private const string BaseUrl = "https://sho.rt/";
 
         public UrlShortenerService(int cacheCapacity = 1000)
         {
-            _idGen     = new IdGenerator();
-            _db        = new UrlRepository();
-            _cache     = new LruCache<string, UrlRecord>(cacheCapacity);
+            _idGen = new IdGenerator();
+            _db = new UrlRepository();
+            _cache = new LruCache<string, UrlRecord>(cacheCapacity);
             _analytics = new ClickAnalytics();
         }
 
@@ -237,15 +237,15 @@ namespace AdvancedDesigns
         public (string ShortUrl, string Error) Shorten(
             string longUrl,
             string customAlias = null,
-            int?   ttlDays     = null,
-            string createdBy   = "anonymous")
+            int? ttlDays = null,
+            string createdBy = "anonymous")
         {
             if (string.IsNullOrWhiteSpace(longUrl) ||
                 !longUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
                 return (null, "Invalid URL: must start with http/https");
 
             string shortCode;
-            bool   isCustom = false;
+            bool isCustom = false;
 
             if (customAlias != null)
             {
@@ -261,7 +261,7 @@ namespace AdvancedDesigns
                     return (null, $"Alias '{customAlias}' is already taken");
 
                 shortCode = customAlias;
-                isCustom  = true;
+                isCustom = true;
             }
             else
             {
@@ -271,15 +271,15 @@ namespace AdvancedDesigns
 
             var record = new UrlRecord
             {
-                Id        = isCustom ? 0 : Base62.Decode(shortCode),
+                Id = isCustom ? 0 : Base62.Decode(shortCode),
                 ShortCode = shortCode,
-                LongUrl   = longUrl,
+                LongUrl = longUrl,
                 CreatedBy = createdBy,
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = ttlDays.HasValue
                             ? DateTime.UtcNow.AddDays(ttlDays.Value)
                             : (DateTime?)null,
-                IsCustom  = isCustom
+                IsCustom = isCustom
             };
 
             if (!_db.TryInsert(record))
@@ -305,8 +305,8 @@ namespace AdvancedDesigns
                 return new RedirectResult
                 {
                     StatusCode = 302,
-                    LongUrl    = cached.LongUrl,
-                    FromCache  = true
+                    LongUrl = cached.LongUrl,
+                    FromCache = true
                 };
             }
 
@@ -325,8 +325,8 @@ namespace AdvancedDesigns
             return new RedirectResult
             {
                 StatusCode = 302,
-                LongUrl    = record.LongUrl,
-                FromCache  = false
+                LongUrl = record.LongUrl,
+                FromCache = false
             };
         }
 
@@ -387,8 +387,8 @@ namespace AdvancedDesigns
             Console.WriteLine($"  {new string('─', 50)}");
             foreach (long id in sampleIds)
             {
-                string code    = Base62.Encode(id);
-                long   decoded = Base62.Decode(code);
+                string code = Base62.Encode(id);
+                long decoded = Base62.Decode(code);
                 Console.WriteLine($"  {id,-20} {code,-12} {decoded}  {(decoded == id ? "✓" : "✗")}");
             }
             Console.WriteLine($"\n  62^7 = {Math.Pow(62, 7):N0} unique codes " +
@@ -463,12 +463,12 @@ namespace AdvancedDesigns
             // manually expire by creating a record that's already past its TTL
             var expiredRecord = new UrlRecord
             {
-                Id        = 999,
+                Id = 999,
                 ShortCode = "expired",
-                LongUrl   = "https://old-promo.example.com",
+                LongUrl = "https://old-promo.example.com",
                 CreatedAt = DateTime.UtcNow.AddDays(-2),
                 ExpiresAt = DateTime.UtcNow.AddSeconds(-1), // already expired
-                IsActive  = true
+                IsActive = true
             };
             // reach into cache to demonstrate 410 handling
             svc2.Cache.Put("expired", expiredRecord);
@@ -486,7 +486,7 @@ namespace AdvancedDesigns
             Console.WriteLine($"\n  Promo URL: {promoUrl}");
             Console.WriteLine("  Simulating 12 clicks from different countries...");
 
-            string[] countries = { "US","US","US","US","UK","UK","DE","DE","IN","IN","CA","AU" };
+            string[] countries = { "US", "US", "US", "US", "UK", "UK", "DE", "DE", "IN", "IN", "CA", "AU" };
             foreach (string country in countries)
                 svc3.Redirect("summer-sale", country);
 

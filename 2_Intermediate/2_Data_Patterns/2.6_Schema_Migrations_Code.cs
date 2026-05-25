@@ -37,7 +37,7 @@ namespace DataPatterns
     {
         public string Name;
         public string Type;
-        public bool   IsNullable;
+        public bool IsNullable;
 
         public override string ToString() =>
             $"{Name} {Type}{(IsNullable ? "" : " NOT NULL")}";
@@ -48,9 +48,9 @@ namespace DataPatterns
     public class SimulatedTable
     {
         public string Name;
-        public Dictionary<string, ColumnDef>         Schema  = new Dictionary<string, ColumnDef>();
-        public List<Dictionary<string, object>>       Rows    = new List<Dictionary<string, object>>();
-        public List<string>                           Indexes = new List<string>();
+        public Dictionary<string, ColumnDef> Schema = [];
+        public List<Dictionary<string, object>> Rows = [];
+        public List<string> Indexes = [];
 
         public void AddColumn(string name, string type, bool nullable = true)
         {
@@ -83,11 +83,10 @@ namespace DataPatterns
     // Wraps all tables + the schema_migrations tracking table.
     public class SimulatedDatabase
     {
-        public Dictionary<string, SimulatedTable> Tables
-            = new Dictionary<string, SimulatedTable>();
+        public Dictionary<string, SimulatedTable> Tables = [];
 
         // Mirrors the real schema_migrations table that Flyway/Liquibase manage.
-        public List<MigrationRecord> AppliedMigrations = new List<MigrationRecord>();
+        public List<MigrationRecord> AppliedMigrations = [];
 
         public SimulatedTable GetOrCreate(string tableName)
         {
@@ -106,18 +105,18 @@ namespace DataPatterns
 
     public class MigrationRecord
     {
-        public int      Version;
-        public string   Description;
-        public string   Checksum;    // SHA256 of the migration script text
+        public int Version;
+        public string Description;
+        public string Checksum;    // SHA256 of the migration script text
         public DateTime AppliedAt;
     }
 
     public interface IMigration
     {
-        int    Version     { get; }
+        int Version { get; }
         string Description { get; }
-        string Script      { get; } // canonical text used for checksum
-        void   Up(SimulatedDatabase db);
+        string Script { get; } // canonical text used for checksum
+        void Up(SimulatedDatabase db);
     }
 
     // =========================================================================
@@ -128,18 +127,18 @@ namespace DataPatterns
     public class MigrationRunner
     {
         private readonly SimulatedDatabase _db;
-        private readonly List<IMigration>  _migrations;
+        private readonly List<IMigration> _migrations;
 
         public MigrationRunner(SimulatedDatabase db, List<IMigration> migrations)
         {
-            _db         = db;
+            _db = db;
             _migrations = migrations.OrderBy(m => m.Version).ToList();
         }
 
         // Returns (applied count, errors).
         public (int applied, List<string> errors) Migrate()
         {
-            var errors  = new List<string>();
+            var errors = new List<string>();
             int applied = 0;
 
             foreach (IMigration migration in _migrations)
@@ -168,10 +167,10 @@ namespace DataPatterns
                     migration.Up(_db);
                     _db.AppliedMigrations.Add(new MigrationRecord
                     {
-                        Version     = migration.Version,
+                        Version = migration.Version,
                         Description = migration.Description,
-                        Checksum    = ComputeChecksum(migration.Script),
-                        AppliedAt   = DateTime.UtcNow
+                        Checksum = ComputeChecksum(migration.Script),
+                        AppliedAt = DateTime.UtcNow
                     });
                     applied++;
                     Console.WriteLine($"    ✓ V{migration.Version:D3} applied");
@@ -212,23 +211,23 @@ namespace DataPatterns
     // Additive: safe to deploy before new code (old code ignores new tables).
     public class V001_CreateUsersTable : IMigration
     {
-        public int    Version     => 1;
+        public int Version => 1;
         public string Description => "create_users_table";
-        public string Script      => "CREATE TABLE users (id INT NOT NULL, email VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ NOT NULL);";
+        public string Script => "CREATE TABLE users (id INT NOT NULL, email VARCHAR(255) NOT NULL, created_at TIMESTAMPTZ NOT NULL);";
 
         public void Up(SimulatedDatabase db)
         {
             SimulatedTable t = db.GetOrCreate("users");
-            t.AddColumn("id",         "INT",          nullable: false);
-            t.AddColumn("email",      "VARCHAR(255)",  nullable: false);
-            t.AddColumn("created_at", "TIMESTAMPTZ",   nullable: false);
+            t.AddColumn("id", "INT", nullable: false);
+            t.AddColumn("email", "VARCHAR(255)", nullable: false);
+            t.AddColumn("created_at", "TIMESTAMPTZ", nullable: false);
 
             // Seed rows so backfill scenarios have data to work with.
             for (int i = 1; i <= 12; i++)
                 t.Rows.Add(new Dictionary<string, object>
                 {
-                    ["id"]         = i,
-                    ["email"]      = $"user{i}@example.com",
+                    ["id"] = i,
+                    ["email"] = $"user{i}@example.com",
                     ["created_at"] = DateTime.UtcNow.AddDays(-i)
                 });
         }
@@ -238,9 +237,9 @@ namespace DataPatterns
     // CONCURRENTLY: does not block reads/writes during index build.
     public class V002_AddEmailIndex : IMigration
     {
-        public int    Version     => 2;
+        public int Version => 2;
         public string Description => "add_email_index_concurrently";
-        public string Script      => "CREATE INDEX CONCURRENTLY idx_users_email ON users(email);";
+        public string Script => "CREATE INDEX CONCURRENTLY idx_users_email ON users(email);";
 
         public void Up(SimulatedDatabase db) =>
             db.Get("users").AddIndex("CONCURRENTLY idx_users_email", "email");
@@ -250,16 +249,16 @@ namespace DataPatterns
     // Additive: new table, fully backward-compatible.
     public class V003_CreateOrdersTable : IMigration
     {
-        public int    Version     => 3;
+        public int Version => 3;
         public string Description => "create_orders_table";
-        public string Script      => "CREATE TABLE orders (id INT NOT NULL, user_id INT NOT NULL, total DECIMAL NOT NULL);";
+        public string Script => "CREATE TABLE orders (id INT NOT NULL, user_id INT NOT NULL, total DECIMAL NOT NULL);";
 
         public void Up(SimulatedDatabase db)
         {
             SimulatedTable t = db.GetOrCreate("orders");
-            t.AddColumn("id",      "INT",     nullable: false);
-            t.AddColumn("user_id", "INT",     nullable: false);
-            t.AddColumn("total",   "DECIMAL", nullable: false);
+            t.AddColumn("id", "INT", nullable: false);
+            t.AddColumn("user_id", "INT", nullable: false);
+            t.AddColumn("total", "DECIMAL", nullable: false);
         }
     }
 
@@ -272,9 +271,9 @@ namespace DataPatterns
     //   WRITE: both email AND email_address
     public class V004_ExpandAddEmailAddress : IMigration
     {
-        public int    Version     => 4;
+        public int Version => 4;
         public string Description => "expand_add_email_address_column";
-        public string Script      => "ALTER TABLE users ADD COLUMN email_address VARCHAR(255);";
+        public string Script => "ALTER TABLE users ADD COLUMN email_address VARCHAR(255);";
 
         public void Up(SimulatedDatabase db) =>
             db.Get("users").AddColumn("email_address", "VARCHAR(255)", nullable: true);
@@ -285,17 +284,17 @@ namespace DataPatterns
     // In production this runs as a background job, not a single UPDATE.
     public class V005_BackfillEmailAddress : IMigration
     {
-        public int    Version     => 5;
+        public int Version => 5;
         public string Description => "backfill_email_address_from_email";
-        public string Script      => "UPDATE users SET email_address = email WHERE email_address IS NULL LIMIT 5; -- repeat";
+        public string Script => "UPDATE users SET email_address = email WHERE email_address IS NULL LIMIT 5; -- repeat";
 
-        private const int BatchSize   = 5;  // small batch: short lock window
-        private const int SleepMs     = 10; // yield to application writes between batches
+        private const int BatchSize = 5;  // small batch: short lock window
+        private const int SleepMs = 10; // yield to application writes between batches
 
         public void Up(SimulatedDatabase db)
         {
             SimulatedTable users = db.Get("users");
-            int total    = 0;
+            int total = 0;
             int batchNum = 0;
 
             while (true)
@@ -329,9 +328,9 @@ namespace DataPatterns
     //   2. Run V006        → drop email safely
     public class V006_ContractDropEmail : IMigration
     {
-        public int    Version     => 6;
+        public int Version => 6;
         public string Description => "contract_drop_old_email_column";
-        public string Script      => "ALTER TABLE users DROP COLUMN email;";
+        public string Script => "ALTER TABLE users DROP COLUMN email;";
 
         public void Up(SimulatedDatabase db) =>
             db.Get("users").DropColumn("email");
@@ -342,9 +341,9 @@ namespace DataPatterns
     // This means the rollback path is tested, versioned, and safe.
     public class V007_ForwardRollbackRestoreEmail : IMigration
     {
-        public int    Version     => 7;
+        public int Version => 7;
         public string Description => "forward_rollback_restore_email_column";
-        public string Script      => "ALTER TABLE users ADD COLUMN email VARCHAR(255); UPDATE users SET email = email_address;";
+        public string Script => "ALTER TABLE users ADD COLUMN email VARCHAR(255); UPDATE users SET email = email_address;";
 
         public void Up(SimulatedDatabase db)
         {
@@ -366,11 +365,11 @@ namespace DataPatterns
         public enum AppVersion { V1_OldOnly, V2_DualWrite, V3_NewOnly }
 
         private readonly SimulatedTable _users;
-        private readonly AppVersion     _version;
+        private readonly AppVersion _version;
 
         public UserRepository(SimulatedTable users, AppVersion version)
         {
-            _users   = users;
+            _users = users;
             _version = version;
         }
 
@@ -390,7 +389,7 @@ namespace DataPatterns
 
                 case AppVersion.V2_DualWrite:
                     // Expand phase: write to both so reads from either column succeed
-                    row["email"]         = newEmail;
+                    row["email"] = newEmail;
                     row["email_address"] = newEmail;
                     Console.WriteLine($"    [v2] Dual-wrote email + email_address for user {userId}");
                     break;
@@ -411,13 +410,13 @@ namespace DataPatterns
 
             return _version switch
             {
-                AppVersion.V1_OldOnly  => row["email"]?.ToString(),
+                AppVersion.V1_OldOnly => row["email"]?.ToString(),
                 // Fall back to email if email_address not yet backfilled (stale row)
                 AppVersion.V2_DualWrite => (row.ContainsKey("email_address") && row["email_address"] != null
                                             ? row["email_address"]
                                             : row["email"])?.ToString(),
-                AppVersion.V3_NewOnly  => row["email_address"]?.ToString(),
-                _                      => null
+                AppVersion.V3_NewOnly => row["email_address"]?.ToString(),
+                _ => null
             };
         }
     }
@@ -439,7 +438,7 @@ namespace DataPatterns
             Console.WriteLine("║  Scenario 1: Sequential migrations — versioning and tracking  ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
 
-            var db     = new SimulatedDatabase();
+            var db = new SimulatedDatabase();
             var runner = new MigrationRunner(db, new List<IMigration>
             {
                 new V001_CreateUsersTable(),
@@ -581,11 +580,11 @@ namespace DataPatterns
     // Helper: tampered version of V001 used in Scenario 2
     internal class TamperedV001 : IMigration
     {
-        public int    Version     => 1;
+        public int Version => 1;
         public string Description => "create_users_table";
         // Different script text → different checksum → tamper detected
-        public string Script      => "CREATE TABLE users (id INT NOT NULL, email TEXT NOT NULL);";
-        public void   Up(SimulatedDatabase db) { }
+        public string Script => "CREATE TABLE users (id INT NOT NULL, email TEXT NOT NULL);";
+        public void Up(SimulatedDatabase db) { }
     }
 
 } // namespace DataPatterns

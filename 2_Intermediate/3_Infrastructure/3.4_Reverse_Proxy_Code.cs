@@ -36,12 +36,12 @@ namespace Infrastructure
 
     public class BackendServer
     {
-        public string        Id;           // e.g. "backend-A"
-        public string        Address;      // e.g. "http://10.0.0.1:8080"
-        public BackendState  State        = BackendState.Healthy;
-        public int           ActiveConns  = 0;   // live connections (for least-conn)
-        public int           PassiveFails = 0;   // consecutive 5xx on real traffic
-        public int           TotalHandled = 0;   // counter for demo output
+        public string Id;           // e.g. "backend-A"
+        public string Address;      // e.g. "http://10.0.0.1:8080"
+        public BackendState State = BackendState.Healthy;
+        public int ActiveConns = 0;   // live connections (for least-conn)
+        public int PassiveFails = 0;   // consecutive 5xx on real traffic
+        public int TotalHandled = 0;   // counter for demo output
 
         // Simulate whether this backend will succeed or fail for testing.
         public bool SimulateFailure = false;
@@ -55,12 +55,12 @@ namespace Infrastructure
 
     public class ProxyRequest
     {
-        public string                     Method   = "GET";
-        public string                     Url;     // full URL including scheme
-        public string                     Path;
-        public string                     ClientIp;
-        public Dictionary<string, string> Headers  = new Dictionary<string, string>();
-        public string                     Body;
+        public string Method = "GET";
+        public string Url;     // full URL including scheme
+        public string Path;
+        public string ClientIp;
+        public Dictionary<string, string> Headers = [];
+        public string Body;
 
         public string Scheme => Url?.StartsWith("https", StringComparison.OrdinalIgnoreCase) == true
                                 ? "https" : "http";
@@ -68,10 +68,10 @@ namespace Infrastructure
 
     public class ProxyResponse
     {
-        public int                        StatusCode;
-        public Dictionary<string, string> Headers  = new Dictionary<string, string>();
-        public string                     Body;
-        public string                     HandledBy; // which backend served it
+        public int StatusCode;
+        public Dictionary<string, string> Headers = [];
+        public string Body;
+        public string HandledBy; // which backend served it
 
         public override string ToString() =>
             $"HTTP {StatusCode} from {HandledBy ?? "?"} | {Body}";
@@ -149,11 +149,11 @@ namespace Infrastructure
 
         public HealthMonitor(
             List<BackendServer> backends,
-            int passiveFailThreshold  = 3,
+            int passiveFailThreshold = 3,
             int activeCheckIntervalMs = 500)
         {
-            _backends              = backends;
-            _passiveFailThreshold  = passiveFailThreshold;
+            _backends = backends;
+            _passiveFailThreshold = passiveFailThreshold;
             _activeCheckIntervalMs = activeCheckIntervalMs;
         }
 
@@ -175,7 +175,7 @@ namespace Infrastructure
 
                 if (healthy && b.State == BackendState.Down)
                 {
-                    b.State        = BackendState.Healthy;
+                    b.State = BackendState.Healthy;
                     b.PassiveFails = 0;
                     Console.WriteLine($"    [HealthMonitor] {b.Id} RECOVERED → Healthy");
                 }
@@ -198,8 +198,7 @@ namespace Infrastructure
             }
 
             backend.PassiveFails++;
-            if (backend.PassiveFails >= _passiveFailThreshold &&
-                backend.State == BackendState.Healthy)
+            if (backend.PassiveFails >= _passiveFailThreshold && backend.State == BackendState.Healthy)
             {
                 backend.State = BackendState.Down;
                 Console.WriteLine($"    [HealthMonitor] {backend.Id} → Down " +
@@ -233,14 +232,14 @@ namespace Infrastructure
     public class ReverseProxy
     {
         private readonly List<BackendServer> _backends;
-        private readonly ILoadBalancer       _balancer;
-        private readonly HealthMonitor       _health;
+        private readonly ILoadBalancer _balancer;
+        private readonly HealthMonitor _health;
 
         public ReverseProxy(List<BackendServer> backends, ILoadBalancer balancer)
         {
             _backends = backends;
             _balancer = balancer;
-            _health   = new HealthMonitor(backends, passiveFailThreshold: 3);
+            _health = new HealthMonitor(backends, passiveFailThreshold: 3);
         }
 
         public HealthMonitor HealthMonitor => _health;
@@ -263,7 +262,7 @@ namespace Infrastructure
             // Build X-Forwarded-For chain: append proxy's address to any existing value.
             // The backend reads the leftmost IP as the real client.
             request.Headers["X-Forwarded-For"] = request.ClientIp ?? "unknown";
-            request.Headers["X-Real-IP"]        = request.ClientIp ?? "unknown";
+            request.Headers["X-Real-IP"] = request.ClientIp ?? "unknown";
 
             // ── Step 3: Pick a healthy backend ────────────────────────────────
             List<BackendServer> healthy = _backends
@@ -278,8 +277,8 @@ namespace Infrastructure
                 return new ProxyResponse
                 {
                     StatusCode = 503,
-                    Body       = "{\"error\":\"no healthy backends\"}",
-                    HandledBy  = "proxy"
+                    Body = "{\"error\":\"no healthy backends\"}",
+                    HandledBy = "proxy"
                 };
             }
 
@@ -298,7 +297,7 @@ namespace Infrastructure
 
                 // Attach diagnostics headers to the response.
                 response.HandledBy = backend.Id;
-                response.Headers["X-Served-By"]      = backend.Id;
+                response.Headers["X-Served-By"] = backend.Id;
                 response.Headers["X-Forwarded-Proto"] = originalScheme;
 
                 return response;
@@ -318,17 +317,17 @@ namespace Infrastructure
                 return new ProxyResponse
                 {
                     StatusCode = 500,
-                    Body       = $"{{\"error\":\"{backend.Id} internal error\"}}"
+                    Body = $"{{\"error\":\"{backend.Id} internal error\"}}"
                 };
             }
 
             // Successful backend response — includes the headers the proxy forwarded.
-            string xForwardedFor  = req.Headers.GetValueOrDefault("X-Forwarded-For", "—");
+            string xForwardedFor = req.Headers.GetValueOrDefault("X-Forwarded-For", "—");
             string xForwardedProto = req.Headers.GetValueOrDefault("X-Forwarded-Proto", "—");
             return new ProxyResponse
             {
                 StatusCode = 200,
-                Body       = $"{{\"backend\":\"{backend.Id}\",\"path\":\"{req.Path}\"," +
+                Body = $"{{\"backend\":\"{backend.Id}\",\"path\":\"{req.Path}\"," +
                              $"\"X-Forwarded-For\":\"{xForwardedFor}\"," +
                              $"\"X-Forwarded-Proto\":\"{xForwardedProto}\"}}"
             };
@@ -340,12 +339,12 @@ namespace Infrastructure
     // =========================================================================
     public class Program
     {
-        private static List<BackendServer> FreshPool() => new List<BackendServer>
-        {
+        private static List<BackendServer> FreshPool() =>
+        [
             new BackendServer { Id = "backend-A", Address = "http://10.0.0.1:8080" },
             new BackendServer { Id = "backend-B", Address = "http://10.0.0.2:8080" },
             new BackendServer { Id = "backend-C", Address = "http://10.0.0.3:8080" }
-        };
+        ];
 
         public static void Main()
         {
@@ -358,16 +357,16 @@ namespace Infrastructure
             Console.WriteLine("║  Scenario 1: Round-Robin — 6 requests across 3 backends       ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝\n");
 
-            var rrPool  = FreshPool();
+            var rrPool = FreshPool();
             var rrProxy = new ReverseProxy(rrPool, new RoundRobinBalancer());
 
             for (int i = 1; i <= 6; i++)
             {
                 ProxyResponse r = rrProxy.Forward(new ProxyRequest
                 {
-                    Method   = "GET",
-                    Url      = "https://api.example.com/products",
-                    Path     = "/products",
+                    Method = "GET",
+                    Url = "https://api.example.com/products",
+                    Path = "/products",
                     ClientIp = $"203.0.113.{i}"
                 });
                 Console.WriteLine($"  Request {i}: {r}");
@@ -387,7 +386,7 @@ namespace Infrastructure
             Console.WriteLine("║  Scenario 2: Least-Connections — avoid overloaded backend      ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝\n");
 
-            var lcPool  = FreshPool();
+            var lcPool = FreshPool();
             var lcProxy = new ReverseProxy(lcPool, new LeastConnectionsBalancer());
 
             // Simulate 3 long-running requests already in-flight on backend-A.
@@ -399,9 +398,9 @@ namespace Infrastructure
             {
                 ProxyResponse r = lcProxy.Forward(new ProxyRequest
                 {
-                    Method   = "GET",
-                    Path     = "/checkout",
-                    Url      = "https://api.example.com/checkout",
+                    Method = "GET",
+                    Path = "/checkout",
+                    Url = "https://api.example.com/checkout",
                     ClientIp = $"198.51.100.{i}"
                 });
                 Console.WriteLine($"  Request {i}: {r}");
@@ -417,7 +416,7 @@ namespace Infrastructure
             Console.WriteLine("║  Scenario 3: IP-Hash — same client always hits same backend    ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝\n");
 
-            var ihPool  = FreshPool();
+            var ihPool = FreshPool();
             var ihProxy = new ReverseProxy(ihPool, new IpHashBalancer());
 
             string[] clients = { "1.2.3.4", "5.6.7.8", "1.2.3.4", "5.6.7.8", "1.2.3.4", "9.10.11.12" };
@@ -425,9 +424,9 @@ namespace Infrastructure
             {
                 ProxyResponse r = ihProxy.Forward(new ProxyRequest
                 {
-                    Method   = "GET",
-                    Path     = "/dashboard",
-                    Url      = "https://api.example.com/dashboard",
+                    Method = "GET",
+                    Path = "/dashboard",
+                    Url = "https://api.example.com/dashboard",
                     ClientIp = ip
                 });
                 Console.WriteLine($"  Client {ip,-15} → {r.HandledBy}");
@@ -444,7 +443,7 @@ namespace Infrastructure
             Console.WriteLine("║  Scenario 4: Passive health check — backend-B fails → Down     ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝\n");
 
-            var phPool  = FreshPool();
+            var phPool = FreshPool();
             var phProxy = new ReverseProxy(phPool, new RoundRobinBalancer());
 
             phPool[1].SimulateFailure = true; // backend-B will always return 500
@@ -454,9 +453,9 @@ namespace Infrastructure
             {
                 ProxyResponse r = phProxy.Forward(new ProxyRequest
                 {
-                    Method   = "GET",
-                    Path     = "/api/data",
-                    Url      = "http://api.example.com/api/data",
+                    Method = "GET",
+                    Path = "/api/data",
+                    Url = "http://api.example.com/api/data",
                     ClientIp = "10.10.10.1"
                 });
                 Console.WriteLine($"  Request {i}: HTTP {r.StatusCode} from {r.HandledBy}");
@@ -476,7 +475,7 @@ namespace Infrastructure
             Console.WriteLine("║  Scenario 5: Active health check — backend-C down then recovers║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝\n");
 
-            var ahPool  = FreshPool();
+            var ahPool = FreshPool();
             var ahProxy = new ReverseProxy(ahPool, new RoundRobinBalancer());
 
             ahPool[2].SimulateFailure = true; // backend-C broken at start
@@ -493,9 +492,9 @@ namespace Infrastructure
             {
                 ProxyResponse r = ahProxy.Forward(new ProxyRequest
                 {
-                    Method   = "GET",
-                    Path     = "/status",
-                    Url      = "http://api.example.com/status",
+                    Method = "GET",
+                    Path = "/status",
+                    Url = "http://api.example.com/status",
                     ClientIp = "172.16.0.1"
                 });
                 Console.WriteLine($"  Request {i}: {r}");
@@ -522,7 +521,7 @@ namespace Infrastructure
             Console.WriteLine("║  Scenario 6: Graceful drain — zero-downtime backend removal    ║");
             Console.WriteLine("╚══════════════════════════════════════════════════════════════╝\n");
 
-            var gdPool  = FreshPool();
+            var gdPool = FreshPool();
             var gdProxy = new ReverseProxy(gdPool, new RoundRobinBalancer());
 
             Console.WriteLine("  2 requests before drain (all 3 backends healthy):");
@@ -530,8 +529,10 @@ namespace Infrastructure
             {
                 ProxyResponse r = gdProxy.Forward(new ProxyRequest
                 {
-                    Method = "GET", Path = "/home",
-                    Url = "http://api.example.com/home", ClientIp = "10.0.1.1"
+                    Method = "GET",
+                    Path = "/home",
+                    Url = "http://api.example.com/home",
+                    ClientIp = "10.0.1.1"
                 });
                 Console.WriteLine($"  Request {i}: {r}");
             }
@@ -544,8 +545,10 @@ namespace Infrastructure
             {
                 ProxyResponse r = gdProxy.Forward(new ProxyRequest
                 {
-                    Method = "GET", Path = "/home",
-                    Url = "http://api.example.com/home", ClientIp = "10.0.1.1"
+                    Method = "GET",
+                    Path = "/home",
+                    Url = "http://api.example.com/home",
+                    ClientIp = "10.0.1.1"
                 });
                 Console.WriteLine($"  Request {i}: {r}  ← no backend-A");
             }

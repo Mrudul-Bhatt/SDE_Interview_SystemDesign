@@ -32,10 +32,10 @@ namespace Infrastructure
 
     public class GatewayRequest
     {
-        public string                     Method;  // GET, POST, PUT, DELETE
-        public string                     Path;    // /api/orders/99
-        public Dictionary<string, string> Headers = new Dictionary<string, string>();
-        public string                     Body;
+        public string Method;  // GET, POST, PUT, DELETE
+        public string Path;    // /api/orders/99
+        public Dictionary<string, string> Headers = [];
+        public string Body;
 
         public string GetHeader(string key) =>
             Headers.TryGetValue(key, out string v) ? v : null;
@@ -43,35 +43,34 @@ namespace Infrastructure
 
     public class GatewayResponse
     {
-        public int                        StatusCode;
-        public Dictionary<string, string> Headers = new Dictionary<string, string>();
-        public string                     Body;
+        public int StatusCode;
+        public Dictionary<string, string> Headers = [];
+        public string Body;
 
         public void AddHeader(string key, string value) => Headers[key] = value;
 
-        public static GatewayResponse Ok(string body) =>
-            new GatewayResponse { StatusCode = 200, Body = body };
+        public static GatewayResponse Ok(string body) => new() { StatusCode = 200, Body = body };
 
-        public static GatewayResponse Created(string body) =>
-            new GatewayResponse { StatusCode = 201, Body = body };
+        public static GatewayResponse Created(string body) => new() { StatusCode = 201, Body = body };
 
-        public static GatewayResponse Unauthorized(string msg) =>
-            new GatewayResponse { StatusCode = 401, Body = $"{{\"error\":\"{msg}\"}}" };
+        public static GatewayResponse Unauthorized(string msg) => new()
+        { StatusCode = 401, Body = $"{{\"error\":\"{msg}\"}}" };
 
         public static GatewayResponse TooManyRequests(int retryAfterSecs) =>
-            new GatewayResponse
+            new()
             {
                 StatusCode = 429,
-                Body       = "{\"error\":\"rate limit exceeded\"}",
-                Headers    = new Dictionary<string, string>
+                Body = "{\"error\":\"rate limit exceeded\"}",
+                Headers = new Dictionary<string, string>
                 {
-                    ["Retry-After"]          = retryAfterSecs.ToString(),
+                    ["Retry-After"] = retryAfterSecs.ToString(),
                     ["X-RateLimit-Remaining"] = "0"
                 }
             };
 
         public static GatewayResponse NotFound(string path) =>
-            new GatewayResponse { StatusCode = 404, Body = $"{{\"error\":\"no route for {path}\"}}" };
+            new()
+            { StatusCode = 404, Body = $"{{\"error\":\"no route for {path}\"}}" };
 
         public override string ToString()
         {
@@ -85,14 +84,14 @@ namespace Infrastructure
     // Each middleware reads and writes to it instead of passing parameters.
     public class GatewayContext
     {
-        public GatewayRequest  Request;
+        public GatewayRequest Request;
         public GatewayResponse Response;       // set by any middleware to short-circuit
 
         public string CorrelationId;           // injected by CorrelationMiddleware
         public string ClientId;                // set by AuthMiddleware (from API key lookup)
         public string UserId;                  // forwarded to backend as X-User-Id
         public string UserRole;                // forwarded to backend as X-User-Role
-        public bool   ServedFromCache;         // set by CacheMiddleware
+        public bool ServedFromCache;         // set by CacheMiddleware
 
         public bool IsHandled => Response != null; // any middleware can terminate the chain
     }
@@ -103,7 +102,7 @@ namespace Infrastructure
     public interface IMiddleware
     {
         string Name { get; }
-        void   Invoke(GatewayContext ctx, MiddlewareNext next);
+        void Invoke(GatewayContext ctx, MiddlewareNext next);
     }
 
     // =========================================================================
@@ -143,11 +142,11 @@ namespace Infrastructure
         // Simulates the API key → (userId, role) lookup in Redis or a DB.
         // In production this is a fast O(1) Redis GET, not a table scan.
         private static readonly Dictionary<string, (string UserId, string Role)> _keys
-            = new Dictionary<string, (string, string)>
+            = new()
             {
                 ["key-admin-001"] = ("user-1", "admin"),
-                ["key-user-002"]  = ("user-2", "customer"),
-                ["key-user-003"]  = ("user-3", "customer")
+                ["key-user-002"] = ("user-2", "customer"),
+                ["key-user-003"] = ("user-3", "customer")
             };
 
         public void Invoke(GatewayContext ctx, MiddlewareNext next)
@@ -162,15 +161,15 @@ namespace Infrastructure
                 return;
             }
 
-            ctx.ClientId  = apiKey;
-            ctx.UserId    = identity.UserId;
-            ctx.UserRole  = identity.Role;
+            ctx.ClientId = apiKey;
+            ctx.UserId = identity.UserId;
+            ctx.UserRole = identity.Role;
 
             // Replace raw API key with decoded identity — backends never see the key.
             // Only the gateway can set these headers (internal network trust boundary).
             ctx.Request.Headers.Remove("X-Api-Key");
-            ctx.Request.Headers["X-User-Id"]   = ctx.UserId;
-            ctx.Request.Headers["X-User-Role"]  = ctx.UserRole;
+            ctx.Request.Headers["X-User-Id"] = ctx.UserId;
+            ctx.Request.Headers["X-User-Role"] = ctx.UserRole;
 
             Console.WriteLine($"    [Auth] OK — clientId={ctx.ClientId}, userId={ctx.UserId}, role={ctx.UserRole}");
             next(ctx);
@@ -186,16 +185,15 @@ namespace Infrastructure
     {
         public string Name => "RateLimit";
 
-        private readonly int      _limit;      // max requests per window
+        private readonly int _limit;      // max requests per window
         private readonly TimeSpan _window;     // window duration
-        private readonly object   _lock = new object();
+        private readonly object _lock = new();
 
-        private readonly Dictionary<string, (int Count, DateTime WindowStart)> _counters
-            = new Dictionary<string, (int, DateTime)>();
+        private readonly Dictionary<string, (int Count, DateTime WindowStart)> _counters = [];
 
         public RateLimitMiddleware(int limit, int windowSeconds)
         {
-            _limit  = limit;
+            _limit = limit;
             _window = TimeSpan.FromSeconds(windowSeconds);
         }
 
@@ -248,11 +246,10 @@ namespace Infrastructure
     {
         public string Name => "Cache";
 
-        private readonly int    _ttlSeconds;
-        private readonly object _lock = new object();
+        private readonly int _ttlSeconds;
+        private readonly object _lock = new();
 
-        private readonly Dictionary<string, (string Body, DateTime ExpiresAt)> _cache
-            = new Dictionary<string, (string, DateTime)>();
+        private readonly Dictionary<string, (string Body, DateTime ExpiresAt)> _cache = [];
 
         public CacheMiddleware(int ttlSeconds) => _ttlSeconds = ttlSeconds;
 
@@ -275,8 +272,8 @@ namespace Infrastructure
                 if (_cache.TryGetValue(key, out var entry) && DateTime.UtcNow < entry.ExpiresAt)
                 {
                     Console.WriteLine($"    [Cache] HIT for {key}");
-                    ctx.Response           = GatewayResponse.Ok(entry.Body);
-                    ctx.ServedFromCache    = true;
+                    ctx.Response = GatewayResponse.Ok(entry.Body);
+                    ctx.ServedFromCache = true;
                     ctx.Response.AddHeader("X-Cache", "HIT");
                     ctx.Response.AddHeader("X-Cache-Key", key);
                     return; // short-circuit — backend not called
@@ -310,8 +307,7 @@ namespace Infrastructure
         public string Name => "Router";
 
         // Route table: (method, path-prefix) → handler
-        private readonly List<(string Method, string Prefix, Action<GatewayContext> Handler)> _routes
-            = new List<(string, string, Action<GatewayContext>)>();
+        private readonly List<(string Method, string Prefix, Action<GatewayContext> Handler)> _routes = [];
 
         public RouterMiddleware Register(string method, string prefix, Action<GatewayContext> handler)
         {
@@ -322,7 +318,7 @@ namespace Infrastructure
         public void Invoke(GatewayContext ctx, MiddlewareNext next)
         {
             string method = ctx.Request.Method.ToUpper();
-            string path   = ctx.Request.Path;
+            string path = ctx.Request.Path;
 
             var route = _routes.FirstOrDefault(r =>
                 r.Method == method && path.StartsWith(r.Prefix, StringComparison.OrdinalIgnoreCase));
@@ -347,7 +343,7 @@ namespace Infrastructure
     // ctx.Response without calling next, the chain short-circuits.
     public class GatewayPipeline
     {
-        private readonly List<IMiddleware> _middlewares = new List<IMiddleware>();
+        private readonly List<IMiddleware> _middlewares = [];
 
         public GatewayPipeline Use(IMiddleware mw)
         {
@@ -363,7 +359,7 @@ namespace Infrastructure
             MiddlewareNext pipeline = _ => { }; // terminal no-op at end of chain
             for (int i = _middlewares.Count - 1; i >= 0; i--)
             {
-                IMiddleware    mw       = _middlewares[i];
+                IMiddleware mw = _middlewares[i];
                 MiddlewareNext nextStep = pipeline;
                 pipeline = c => mw.Invoke(c, nextStep);
             }
@@ -382,8 +378,8 @@ namespace Infrastructure
         private static void OrdersReadHandler(GatewayContext ctx)
         {
             string userId = ctx.Request.GetHeader("X-User-Id");
-            string path   = ctx.Request.Path;
-            ctx.Response  = GatewayResponse.Ok(
+            string path = ctx.Request.Path;
+            ctx.Response = GatewayResponse.Ok(
                 $"{{\"service\":\"order-service\",\"path\":\"{path}\"," +
                 $"\"userId\":\"{userId}\",\"orders\":[\"order-101\",\"order-102\"]}}");
         }
@@ -398,7 +394,7 @@ namespace Infrastructure
         private static void UsersHandler(GatewayContext ctx)
         {
             string userId = ctx.Request.GetHeader("X-User-Id");
-            ctx.Response  = GatewayResponse.Ok(
+            ctx.Response = GatewayResponse.Ok(
                 $"{{\"service\":\"user-service\",\"userId\":\"{userId}\"," +
                 $"\"name\":\"Demo User\",\"role\":\"{ctx.UserRole}\"}}");
         }
@@ -412,10 +408,10 @@ namespace Infrastructure
         private static GatewayPipeline BuildGateway(int rateLimit = 3, int rateLimitWindowSecs = 10, int cacheTtl = 30)
         {
             var router = new RouterMiddleware()
-                .Register("GET",  "/api/orders",   OrdersReadHandler)
-                .Register("POST", "/api/orders",   OrdersWriteHandler)
-                .Register("GET",  "/api/users",    UsersHandler)
-                .Register("GET",  "/api/payments", PaymentsHandler);
+                .Register("GET", "/api/orders", OrdersReadHandler)
+                .Register("POST", "/api/orders", OrdersWriteHandler)
+                .Register("GET", "/api/users", UsersHandler)
+                .Register("GET", "/api/payments", PaymentsHandler);
 
             return new GatewayPipeline()
                 .Use(new CorrelationMiddleware())
@@ -448,8 +444,8 @@ namespace Infrastructure
 
             GatewayResponse r1 = gateway.Process(new GatewayRequest
             {
-                Method  = "GET",
-                Path    = "/api/orders",
+                Method = "GET",
+                Path = "/api/orders",
                 Headers = new Dictionary<string, string> { ["X-Api-Key"] = "key-user-002" }
             });
             PrintResponse(r1, "200 with X-Cache: MISS");
@@ -468,8 +464,8 @@ namespace Infrastructure
 
             GatewayResponse r2 = gateway.Process(new GatewayRequest
             {
-                Method  = "GET",
-                Path    = "/api/orders",
+                Method = "GET",
+                Path = "/api/orders",
                 Headers = new Dictionary<string, string> { ["X-Api-Key"] = "key-invalid-999" }
             });
             PrintResponse(r2, "401 — no backend hit");
@@ -490,8 +486,8 @@ namespace Infrastructure
             {
                 GatewayResponse r = rateLimitedGateway.Process(new GatewayRequest
                 {
-                    Method  = "GET",
-                    Path    = "/api/users",
+                    Method = "GET",
+                    Path = "/api/users",
                     Headers = new Dictionary<string, string> { ["X-Api-Key"] = "key-user-003" }
                 });
                 string note = r.StatusCode == 429
@@ -515,8 +511,8 @@ namespace Infrastructure
             Console.WriteLine("\n  First GET /api/payments (cache miss):");
             GatewayResponse c1 = cachingGateway.Process(new GatewayRequest
             {
-                Method  = "GET",
-                Path    = "/api/payments",
+                Method = "GET",
+                Path = "/api/payments",
                 Headers = new Dictionary<string, string> { ["X-Api-Key"] = "key-admin-001" }
             });
             Console.WriteLine($"  X-Cache: {c1.Headers.GetValueOrDefault("X-Cache", "—")}");
@@ -524,8 +520,8 @@ namespace Infrastructure
             Console.WriteLine("\n  Second GET /api/payments (cache hit — no backend call):");
             GatewayResponse c2 = cachingGateway.Process(new GatewayRequest
             {
-                Method  = "GET",
-                Path    = "/api/payments",
+                Method = "GET",
+                Path = "/api/payments",
                 Headers = new Dictionary<string, string> { ["X-Api-Key"] = "key-admin-001" }
             });
             Console.WriteLine($"  X-Cache: {c2.Headers.GetValueOrDefault("X-Cache", "—")}  ← HIT");
@@ -534,10 +530,10 @@ namespace Infrastructure
             Console.WriteLine("\n  POST /api/orders (cache bypassed — writes always reach backend):");
             GatewayResponse c3 = cachingGateway.Process(new GatewayRequest
             {
-                Method  = "POST",
-                Path    = "/api/orders",
+                Method = "POST",
+                Path = "/api/orders",
                 Headers = new Dictionary<string, string> { ["X-Api-Key"] = "key-user-002" },
-                Body    = "{\"item\":\"keyboard\",\"qty\":1}"
+                Body = "{\"item\":\"keyboard\",\"qty\":1}"
             });
             Console.WriteLine($"  Status: {c3.StatusCode}  X-Cache present: {c3.Headers.ContainsKey("X-Cache")}  ← POST never cached");
 
@@ -557,8 +553,8 @@ namespace Infrastructure
             {
                 GatewayResponse r = routingGateway.Process(new GatewayRequest
                 {
-                    Method  = "GET",
-                    Path    = path,
+                    Method = "GET",
+                    Path = path,
                     Headers = new Dictionary<string, string> { ["X-Api-Key"] = "key-admin-001" }
                 });
                 Console.WriteLine($"\n  GET {path} → HTTP {r.StatusCode}");
