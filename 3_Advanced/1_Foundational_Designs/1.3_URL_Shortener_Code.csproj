@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="1.3_URL_Shortener_Code.cs" />
+    <Compile Include="1.3_URL_Shortener/**/*.cs" />
   </ItemGroup>
 </Project>

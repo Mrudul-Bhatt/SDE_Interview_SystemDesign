@@ -5,14 +5,14 @@
 // ("abc" and "ABC" are different codes) and Ordinal is faster than the default
 // culture-aware comparer for ASCII strings.
 
+using System;
 using System.Collections.Generic;
 
 namespace AdvancedDesigns
 {
     public class UrlRepository
     {
-        private readonly Dictionary<string, UrlRecord> _store
-            = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, UrlRecord> _store = new(StringComparer.Ordinal);
 
         // Returns false if the short code already exists — mirrors a DB unique constraint
         // violation (duplicate key). The caller handles the conflict rather than overwriting.

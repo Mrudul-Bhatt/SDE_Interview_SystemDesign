@@ -27,7 +27,6 @@ namespace AdvancedDesigns
 
         // Computed: checks expiry at read time rather than storing a stale boolean.
         // UtcNow avoids DST edge cases that DateTime.Now can produce.
-        public bool IsExpired =>
-            ExpiresAt.HasValue && DateTime.UtcNow >= ExpiresAt.Value;
+        public bool IsExpired => ExpiresAt.HasValue && DateTime.UtcNow >= ExpiresAt.Value;
     }
 }

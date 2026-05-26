@@ -7,8 +7,7 @@ namespace AdvancedDesigns
 {
     public static class Base62
     {
-        private const string Alphabet =
-            "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        private const string Alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
         private const int Base = 62;
 
         // Fixed 7 chars so all codes have the same length in the short URL.

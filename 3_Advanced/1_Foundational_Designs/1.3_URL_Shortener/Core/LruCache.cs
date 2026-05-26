@@ -22,14 +22,14 @@ namespace AdvancedDesigns
         // Front = most recently used, tail = least recently used (eviction candidate).
         private readonly LinkedList<(TKey Key, TValue Value)> _list;
 
-        public int Hits   { get; private set; }
+        public int Hits { get; private set; }
         public int Misses { get; private set; }
-        public int Count  => _map.Count;
+        public int Count => _map.Count;
 
         public LruCache(int capacity)
         {
             _capacity = capacity;
-            _map  = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity);
+            _map = new Dictionary<TKey, LinkedListNode<(TKey, TValue)>>(capacity);
             _list = new LinkedList<(TKey, TValue)>();
         }
 

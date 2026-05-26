@@ -24,9 +24,9 @@ namespace AdvancedDesigns
 
         public UrlShortenerService(int cacheCapacity = 1000)
         {
-            _idGen     = new IdGenerator();
-            _db        = new UrlRepository();
-            _cache     = new LruCache<string, UrlRecord>(cacheCapacity);
+            _idGen = new IdGenerator();
+            _db = new UrlRepository();
+            _cache = new LruCache<string, UrlRecord>(cacheCapacity);
             _analytics = new ClickAnalytics();
         }
 
@@ -62,7 +62,7 @@ namespace AdvancedDesigns
                     return (null, $"Alias '{customAlias}' is already taken");
 
                 shortCode = customAlias;
-                isCustom  = true;
+                isCustom = true;
             }
             else
             {
@@ -73,15 +73,15 @@ namespace AdvancedDesigns
 
             var record = new UrlRecord
             {
-                Id        = isCustom ? 0 : Base62.Decode(shortCode),
+                Id = isCustom ? 0 : Base62.Decode(shortCode),
                 ShortCode = shortCode,
-                LongUrl   = longUrl,
+                LongUrl = longUrl,
                 CreatedBy = createdBy,
                 CreatedAt = DateTime.UtcNow,
                 ExpiresAt = ttlDays.HasValue
                             ? DateTime.UtcNow.AddDays(ttlDays.Value)
                             : (DateTime?)null,
-                IsCustom  = isCustom
+                IsCustom = isCustom
             };
 
             // TryInsert returns false on a race-condition duplicate (two requests
