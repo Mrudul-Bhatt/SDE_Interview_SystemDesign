@@ -14,15 +14,15 @@ namespace AdvancedDesigns
 {
     public class Trie
     {
-        private readonly TrieNode        _root     = new();
-        private readonly int             _k;
+        private readonly TrieNode _root = new();
+        private readonly int _k;
         private readonly HashSet<string> _blocklist;
 
         public int TotalTerms { get; private set; }
 
         public Trie(int k = 5, HashSet<string> blocklist = null)
         {
-            _k         = k;
+            _k = k;
             // OrdinalIgnoreCase: blocklist lookups are case-insensitive so "Hack" and
             // "hack" are both blocked without duplicating entries.
             _blocklist = blocklist ?? new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -60,7 +60,7 @@ namespace AdvancedDesigns
             }
 
             node.IsEndOfWord = true;
-            node.Frequency   = frequency;
+            node.Frequency = frequency;
             TotalTerms++;
         }
 

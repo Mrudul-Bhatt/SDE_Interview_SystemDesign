@@ -19,7 +19,7 @@ namespace AdvancedDesigns
         private readonly LinkedList<(string Key, List<RankedCompletion> Value)> _list = new();
         private readonly int _capacity;
 
-        public int Hits   { get; private set; }
+        public int Hits { get; private set; }
         public int Misses { get; private set; }
 
         // Default 200: covers the hot set of common 1–3 character prefixes.
