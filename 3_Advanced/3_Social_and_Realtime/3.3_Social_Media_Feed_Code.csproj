@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="3.3_Social_Media_Feed_Code.cs" />
+    <Compile Include="3.3_Social_Media_Feed/**/*.cs" />
   </ItemGroup>
 </Project>

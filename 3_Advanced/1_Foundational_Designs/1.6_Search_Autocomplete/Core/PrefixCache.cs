@@ -6,6 +6,7 @@
 // Why LRU here: the top ~200 prefixes (e.g. "a", "ap", "app") account for the
 // vast majority of traffic (Zipf's law). LRU keeps them hot and evicts rare prefixes.
 
+using System;
 using System.Collections.Generic;
 
 namespace AdvancedDesigns
@@ -19,7 +20,7 @@ namespace AdvancedDesigns
         private readonly LinkedList<(string Key, List<RankedCompletion> Value)> _list = new();
         private readonly int _capacity;
 
-        public int Hits   { get; private set; }
+        public int Hits { get; private set; }
         public int Misses { get; private set; }
 
         // Default 200: covers the hot set of common 1–3 character prefixes.

@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="2.3_Distributed_KV_Store_Code.cs" />
+    <Compile Include="2.3_Distributed_KV_Store/**/*.cs" />
   </ItemGroup>
 </Project>

@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="1.6_Search_Autocomplete_Code.cs" />
+    <Compile Include="1.6_Search_Autocomplete/**/*.cs" />
   </ItemGroup>
 </Project>

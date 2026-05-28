@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="2.6_Distributed_Message_Queue_Code.cs" />
+    <Compile Include="2.6_Distributed_Message_Queue/**/*.cs" />
   </ItemGroup>
 </Project>
