@@ -16,6 +16,7 @@ namespace AdvancedDesigns
             Console.WriteLine("╚" + new string('═', 62) + "╝");
         }
 
+        // Prints one redirect result line: status code, destination URL, and cache/DB source.
         static void PrintRedirect(string code, RedirectResult r)
         {
             string cache = r.FromCache ? " [CACHE HIT]" : " [CACHE MISS → DB]";

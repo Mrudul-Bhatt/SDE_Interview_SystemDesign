@@ -109,7 +109,6 @@ namespace AdvancedDesigns
                 return new RedirectResult { StatusCode = 302, LongUrl = cached.LongUrl, FromCache = true };
             }
 
-            // 2. Cache miss — fall through to DB.
             var record = _db.Find(shortCode);
             if (record == null)
                 return new RedirectResult { StatusCode = 404, Note = "Short code not found" };

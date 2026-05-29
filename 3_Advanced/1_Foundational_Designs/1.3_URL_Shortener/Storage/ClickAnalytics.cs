@@ -24,7 +24,8 @@ namespace AdvancedDesigns
         {
             lock (_lock)
             {
-                // Increment total — TryGetValue avoids KeyNotFoundException on first click.
+                // Dictionary's [] reader throws on a missing key, so we can't do _total[code]++
+                // safely on the first click — TryGetValue returns 0 instead of throwing.
                 _total[shortCode] = _total.TryGetValue(shortCode, out long t) ? t + 1 : 1;
 
                 // Ensure the inner country-map exists before incrementing.

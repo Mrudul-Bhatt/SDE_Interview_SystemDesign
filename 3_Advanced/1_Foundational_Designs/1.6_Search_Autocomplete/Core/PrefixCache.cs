@@ -46,7 +46,8 @@ namespace AdvancedDesigns
         {
             if (_map.TryGetValue(prefix, out var existing))
             {
-                // Refresh existing entry (e.g. after a trend surge invalidation).
+                // Replace existing entry — fires on every Put for a cached prefix,
+                // including trend surge re-warming and normal cache refresh.
                 _list.Remove(existing);
                 _map.Remove(prefix);
             }

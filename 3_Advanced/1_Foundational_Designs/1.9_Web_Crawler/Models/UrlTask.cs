@@ -13,16 +13,16 @@ namespace AdvancedDesigns
 
     public class UrlTask
     {
-        public string        Url      { get; set; }
+        public string Url { get; set; }
 
         // Pre-extracted domain avoids repeated URI parsing in the frontier's
         // hot path — TryDequeue() checks domain throttling on every dequeue.
-        public string        Domain   { get; set; }
+        public string Domain { get; set; }
 
         // Depth from the seed URL. Used to enforce maxDepth (spider-trap defence).
         // Spider traps generate infinite URL sequences (e.g. /calendar?date=next →
         // /calendar?date=next&next → …). A depth cap breaks the cycle.
-        public int           Depth    { get; set; }
+        public int Depth { get; set; }
 
         public CrawlPriority Priority { get; set; }
 

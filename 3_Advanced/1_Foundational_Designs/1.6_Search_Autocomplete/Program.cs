@@ -8,6 +8,7 @@ namespace AdvancedDesigns
 {
     class Program
     {
+        // Draws a titled box to visually separate demo scenarios in console output.
         static void Banner(string title)
         {
             Console.WriteLine("\n╔" + new string('═', 62) + "╗");
@@ -15,6 +16,7 @@ namespace AdvancedDesigns
             Console.WriteLine("╚" + new string('═', 62) + "╝");
         }
 
+        // Prints completions ranked 1..N, or "(no results)" when the list is empty.
         static void PrintResults(string prefix, List<RankedCompletion> results)
         {
             Console.WriteLine($"\n  Query: \"{prefix}\" → {results.Count} completions");

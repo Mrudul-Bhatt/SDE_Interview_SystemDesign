@@ -18,9 +18,9 @@ namespace AdvancedDesigns
         // Single list for simplicity; real system uses separate priority queues.
         // Ordering is applied at dequeue time via LINQ, not at enqueue time —
         // inserts are O(1) and we sort only the small set of candidates at dequeue.
-        private readonly List<UrlTask>                _queue       = new();
-        private readonly Dictionary<string, DateTime> _lastCrawled = new();
-        private readonly RobotsCache                  _robots;
+        private readonly List<UrlTask> _queue = [];
+        private readonly Dictionary<string, DateTime> _lastCrawled = [];
+        private readonly RobotsCache _robots;
         private readonly object _lock = new();
 
         public int Count { get { lock (_lock) return _queue.Count; } }

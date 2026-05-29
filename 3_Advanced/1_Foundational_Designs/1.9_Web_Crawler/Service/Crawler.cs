@@ -17,30 +17,33 @@ namespace AdvancedDesigns
 {
     public class Crawler
     {
-        private readonly UrlFrontier  _frontier;
-        private readonly BloomFilter  _bloom;
-        private readonly RobotsCache  _robots;
+        private readonly UrlFrontier _frontier;
+        private readonly BloomFilter _bloom;
+        private readonly RobotsCache _robots;
         private readonly SimulatedWeb _web;
         private readonly ContentStore _store;
-        private readonly int          _maxDepth;
-        private readonly int          _maxPages;
-        private readonly CrawlStats   _stats = new();
+        private readonly int _maxDepth;
+        private readonly int _maxPages;
+        private readonly CrawlStats _stats = new();
 
-        public CrawlStats   Stats => _stats;
+        public CrawlStats Stats => _stats;
         public ContentStore Store => _store;
 
         public Crawler(SimulatedWeb web, RobotsCache robots,
                        int maxDepth = 3, int maxPages = 100, int bloomSize = 5000)
         {
-            _web      = web;
-            _robots   = robots;
-            _store    = new ContentStore();
-            _bloom    = new BloomFilter(bloomSize, hashCount: 3);
+            _web = web;
+            _robots = robots;
+            _store = new ContentStore();
+            _bloom = new BloomFilter(bloomSize, hashCount: 3);
             _frontier = new UrlFrontier(robots);
             _maxDepth = maxDepth;
             _maxPages = maxPages;
         }
 
+        // Normalizes and enqueues a starting URL at depth 0.
+        // The Bloom check prevents adding the same seed twice if AddSeed is called
+        // multiple times with equivalent URLs (e.g. with and without trailing slash).
         public void AddSeed(string url, CrawlPriority priority = CrawlPriority.High)
         {
             string norm = UrlNormalizer.Normalize(url);
@@ -49,9 +52,9 @@ namespace AdvancedDesigns
             _bloom.Add(norm);
             _frontier.Enqueue(new UrlTask
             {
-                Url      = norm,
-                Domain   = UrlTask.ExtractDomain(norm),
-                Depth    = 0,
+                Url = norm,
+                Domain = UrlTask.ExtractDomain(norm),
+                Depth = 0,
                 Priority = priority
             });
             _stats.UrlsDiscovered++;
@@ -84,11 +87,11 @@ namespace AdvancedDesigns
 
                 _store.Store(new CrawledPage
                 {
-                    Url         = task.Url,
-                    Html        = html,
-                    StatusCode  = status,
-                    CrawledAt   = DateTime.UtcNow,
-                    Depth       = task.Depth,
+                    Url = task.Url,
+                    Html = html,
+                    StatusCode = status,
+                    CrawledAt = DateTime.UtcNow,
+                    Depth = task.Depth,
                     ContentHash = ComputeHash(html)
                 });
                 _stats.PagesCrawled++;
@@ -123,9 +126,9 @@ namespace AdvancedDesigns
                     _bloom.Add(norm);
                     _frontier.Enqueue(new UrlTask
                     {
-                        Url      = norm,
-                        Domain   = UrlTask.ExtractDomain(norm),
-                        Depth    = task.Depth + 1,
+                        Url = norm,
+                        Domain = UrlTask.ExtractDomain(norm),
+                        Depth = task.Depth + 1,
                         Priority = CrawlPriority.Medium
                     });
                 }

@@ -84,12 +84,13 @@ namespace AdvancedDesigns
             return web;
         }
 
+        // Loads per-domain robots.txt rules used across all demo scenarios.
         static RobotsCache BuildRobots()
         {
             var robots = new RobotsCache();
-            robots.LoadRules("example.com", crawlDelayMs: 500,  "/admin", "/private");
-            robots.LoadRules("news.com",    crawlDelayMs: 1000); // allow all, 1s delay
-            robots.LoadRules("shop.com",    crawlDelayMs: 500,  "/checkout", "/cart", "/account");
+            robots.LoadRules("example.com", crawlDelayMs: 500, "/admin", "/private");
+            robots.LoadRules("news.com", crawlDelayMs: 1000); // allow all, 1s delay
+            robots.LoadRules("shop.com", crawlDelayMs: 500, "/checkout", "/cart", "/account");
             return robots;
         }
 
@@ -98,12 +99,12 @@ namespace AdvancedDesigns
             // ══════════════════════════════════════════════════════════════════
             Banner("Scenario 1: Basic crawl — frontier expansion + link discovery");
             // ══════════════════════════════════════════════════════════════════
-            var robots  = BuildRobots();
-            var web     = BuildWeb();
+            var robots = BuildRobots();
+            var web = BuildWeb();
             var crawler = new Crawler(web, robots, maxDepth: 3, maxPages: 20, bloomSize: 5000);
 
             crawler.AddSeed("https://example.com", CrawlPriority.High);
-            crawler.AddSeed("https://news.com",    CrawlPriority.High);
+            crawler.AddSeed("https://news.com", CrawlPriority.High);
 
             Console.WriteLine("\n  Crawl log:");
             crawler.Run(msg => Console.WriteLine(msg));
@@ -146,7 +147,7 @@ namespace AdvancedDesigns
             Banner("Scenario 3: Bloom filter — false positive demonstration");
             // ══════════════════════════════════════════════════════════════════
             var smallBloom = new BloomFilter(size: 100, hashCount: 3);
-            var inserted   = Enumerable.Range(1, 15)
+            var inserted = Enumerable.Range(1, 15)
                 .Select(i => $"https://example.com/page-{i}").ToList();
 
             foreach (string url in inserted) smallBloom.Add(url);
@@ -154,7 +155,7 @@ namespace AdvancedDesigns
             Console.WriteLine($"\n  Inserted {inserted.Count} URLs into a 100-bit Bloom filter");
             Console.WriteLine($"  Fill ratio: {smallBloom.FillRatio:P0}");
 
-            var notInserted  = Enumerable.Range(100, 20)
+            var notInserted = Enumerable.Range(100, 20)
                 .Select(i => $"https://other.com/page-{i}").ToList();
             int falsePositives = notInserted.Count(u => smallBloom.MightContain(u));
 

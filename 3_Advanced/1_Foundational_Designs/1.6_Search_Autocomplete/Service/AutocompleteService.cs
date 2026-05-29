@@ -9,18 +9,20 @@ namespace AdvancedDesigns
 {
     public class AutocompleteService
     {
-        private readonly Trie        _trie;
+        private readonly Trie _trie;
         private readonly PrefixCache _cache;
 
         public AutocompleteService(int k = 5, int cacheCapacity = 200,
                                    HashSet<string> blocklist = null)
         {
-            _trie  = new Trie(k, blocklist);
+            _trie = new Trie(k, blocklist);
             _cache = new PrefixCache(cacheCapacity);
         }
 
         // Bulk-load from aggregated search logs (run once at startup or after rebuild).
         // In production this reads from a batch job output: (term, 30-day-count) pairs.
+        // Calling this twice on the same instance will inflate TotalTerms and re-insert
+        // existing terms — call FlushCache() and recreate the service for a clean rebuild.
         public void BuildFromLogs(IEnumerable<(string Term, int Frequency)> logs)
         {
             foreach (var (term, freq) in logs)
@@ -65,7 +67,7 @@ namespace AdvancedDesigns
         // All cached TopK lists are stale — the new trie may have completely different rankings.
         public void FlushCache() => _cache.Flush();
 
-        public PrefixCache Cache    => _cache;
-        public int TrieTermCount    => _trie.TotalTerms;
+        public PrefixCache Cache => _cache;
+        public int TrieTermCount => _trie.TotalTerms;
     }
 }

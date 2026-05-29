@@ -12,22 +12,26 @@
 //   Each seed produces an independent bit position in the array.
 //   All k positions must be set for MightContain to return true.
 
+using System;
+using System.Collections.Generic;
+using System.Linq;
+
 namespace AdvancedDesigns
 {
     public class BloomFilter
     {
         private readonly bool[] _bits;
-        private readonly int    _size;
-        private readonly int    _hashCount;
+        private readonly int _size;
+        private readonly int _hashCount;
 
-        public int ItemsAdded      { get; private set; }
+        public int ItemsAdded { get; private set; }
         public int ChecksPerformed { get; private set; }
 
         public BloomFilter(int size = 10_000, int hashCount = 3)
         {
-            _size      = size;
+            _size = size;
             _hashCount = hashCount;
-            _bits      = new bool[size];
+            _bits = new bool[size];
         }
 
         public void Add(string item)

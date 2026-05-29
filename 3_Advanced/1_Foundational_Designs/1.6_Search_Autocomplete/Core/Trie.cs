@@ -36,7 +36,6 @@ namespace AdvancedDesigns
         {
             if (string.IsNullOrWhiteSpace(term)) return;
 
-            // Normalise to lowercase so "Apple" and "apple" are the same term.
             // All queries are also lowercased, so casing never affects results.
             term = term.ToLowerInvariant().Trim();
 
@@ -62,6 +61,8 @@ namespace AdvancedDesigns
 
             node.IsEndOfWord = true;
             node.Frequency = frequency;
+            // NOTE: TotalTerms over-counts when UpdateFrequency re-calls Insert for an
+            // existing term. It reflects insertions, not unique terms.
             TotalTerms++;
         }
 
@@ -87,8 +88,9 @@ namespace AdvancedDesigns
             => Insert(term, newFrequency);
 
         // Maintains a sorted, capacity-bounded TopK list at one node.
-        // RemoveAll first handles re-insertion: removes the stale entry for the same term
-        // before adding the updated one, so a term never appears twice in the list.
+        // RemoveAll removes any stale entry for the same term before adding the new one —
+        // this prevents duplicates and is what makes UpdateFrequency correct: after a trend
+        // surge, the term appears exactly once with its new frequency, not twice.
         private void UpdateTopK(TrieNode node, RankedCompletion completion)
         {
             node.TopK.RemoveAll(c => c.Term == completion.Term);

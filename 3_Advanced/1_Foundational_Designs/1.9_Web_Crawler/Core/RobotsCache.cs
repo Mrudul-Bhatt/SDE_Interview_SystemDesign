@@ -16,17 +16,18 @@ namespace AdvancedDesigns
     {
         // Maps domain → list of disallowed path prefixes.
         // StringComparer.OrdinalIgnoreCase: "Example.COM" and "example.com" share rules.
-        private readonly Dictionary<string, List<string>> _disallowed
-            = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, List<string>> _disallowed = new(StringComparer.OrdinalIgnoreCase);
 
         // Maps domain → minimum milliseconds between consecutive crawl requests.
-        private readonly Dictionary<string, int> _crawlDelay
-            = new(StringComparer.OrdinalIgnoreCase);
+        private readonly Dictionary<string, int> _crawlDelay = new(StringComparer.OrdinalIgnoreCase);
 
+        // Simulates parsing a fetched /robots.txt response for a domain.
+        // In production this is called on first visit to each domain and the
+        // result is cached for the session to avoid re-fetching on every request.
         public void LoadRules(string domain, int crawlDelayMs = 1000,
                               params string[] disallowedPaths)
         {
-            _disallowed[domain] = new List<string>(disallowedPaths);
+            _disallowed[domain] = [.. disallowedPaths];
             _crawlDelay[domain] = crawlDelayMs;
         }
 
@@ -39,7 +40,7 @@ namespace AdvancedDesigns
             catch { return false; }
 
             string domain = uri.Host.ToLowerInvariant();
-            string path   = uri.AbsolutePath.ToLowerInvariant();
+            string path = uri.AbsolutePath.ToLowerInvariant();
 
             if (_disallowed.TryGetValue(domain, out var rules))
                 return !rules.Any(r => path.StartsWith(r, StringComparison.OrdinalIgnoreCase));
@@ -48,7 +49,6 @@ namespace AdvancedDesigns
         }
 
         // Default 1000ms if no rule loaded — conservative courtesy rate.
-        public int GetCrawlDelayMs(string domain)
-            => _crawlDelay.TryGetValue(domain, out int d) ? d : 1000;
+        public int GetCrawlDelayMs(string domain) => _crawlDelay.TryGetValue(domain, out int d) ? d : 1000;
     }
 }

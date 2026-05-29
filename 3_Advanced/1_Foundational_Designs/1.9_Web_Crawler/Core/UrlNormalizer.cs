@@ -79,8 +79,9 @@ namespace AdvancedDesigns
             foreach (string pair in q.Split('&'))
             {
                 int eq = pair.IndexOf('=');
+                // eq < 0 handles boolean flags with no value (e.g. "?dark" → key="dark", value="").
                 if (eq < 0) yield return (pair, "");
-                else        yield return (pair.Substring(0, eq), pair.Substring(eq + 1));
+                else yield return (pair.Substring(0, eq), pair.Substring(eq + 1));
             }
         }
     }
