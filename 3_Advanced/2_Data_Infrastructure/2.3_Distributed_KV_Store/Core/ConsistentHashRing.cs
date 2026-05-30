@@ -42,7 +42,9 @@ namespace AdvancedDesigns
             uint pos = Hash(key);
             foreach (var kv in _ring)
                 if (kv.Key >= pos) return kv.Value;
-            return _ring.First().Value; // wrap around
+            // No virtual node sits clockwise of this key — wrap to the ring's start.
+            // This is what makes the structure a ring rather than a list.
+            return _ring.First().Value;
         }
 
         // Returns up to `count` distinct physical nodes clockwise from key.
@@ -51,10 +53,11 @@ namespace AdvancedDesigns
         {
             if (_ring.Count == 0) throw new InvalidOperationException("Ring is empty");
             var result = new List<string>();
-            var seen   = new HashSet<string>();
-            uint pos   = Hash(key);
+            var seen = new HashSet<string>();
+            uint pos = Hash(key);
             uint start = pos;
 
+            // First pass: collect nodes clockwise from the key's position.
             foreach (var kv in _ring)
             {
                 if (kv.Key >= pos && !seen.Contains(kv.Value))
@@ -63,6 +66,9 @@ namespace AdvancedDesigns
                     if (result.Count == count) return result;
                 }
             }
+            // Second pass: wrap around to the start of the ring to fill remaining replica slots.
+            // Needed when the key sits near the end of the ring and fewer than `count`
+            // distinct nodes exist clockwise before the ring wraps.
             foreach (var kv in _ring)
             {
                 if (kv.Key < start && !seen.Contains(kv.Value))

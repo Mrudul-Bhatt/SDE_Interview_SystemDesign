@@ -3,10 +3,10 @@
 // Read path (newest-first): MemTable → L0 SSTables (newest → oldest).
 // This order guarantees the most recent write wins without merging every layer.
 //
-// Why Interlocked.Increment inside a lock: the increment itself is atomic,
-// but we need the Put-then-maybe-flush sequence to be atomic too, so the
-// outer lock is still needed. Interlocked prevents a torn read of _logicalClock
-// if Get() were ever called concurrently without the lock.
+// Logical clock: every Put and Delete increments _logicalClock to get a strictly
+// monotonically increasing timestamp. The outer lock makes the full
+// Put-then-maybe-flush sequence atomic; Interlocked.Increment is used as a
+// clear signal that the clock increment is intentionally thread-safe.
 
 namespace AdvancedDesigns
 {
@@ -77,6 +77,9 @@ namespace AdvancedDesigns
             lock (_lock) return (_memTable.Count, _l0SSTables.Count);
         }
 
+        // Converts the current MemTable into an immutable L0 SSTable and resets
+        // the MemTable for new writes. Called automatically when ShouldFlush is true,
+        // or explicitly via ForceFlush() in tests.
         private void FlushMemTable()
         {
             _l0SSTables.Add(new SSTable(_memTable.GetSortedEntries(), level: 0));

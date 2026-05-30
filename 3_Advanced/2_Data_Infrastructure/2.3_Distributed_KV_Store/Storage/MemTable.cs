@@ -27,6 +27,8 @@ namespace AdvancedDesigns
         public void Put(string key, string value, long timestamp, int? ttlSeconds = null)
         {
             _data[key]   = new StorageEntry(value, timestamp, ttlSeconds);
+            // +32 approximates the per-entry overhead: object header, dictionary node
+            // pointers, and StorageEntry fields — keeps the flush threshold realistic.
             _sizeBytes  += key.Length + (value?.Length ?? 0) + 32;
         }
 

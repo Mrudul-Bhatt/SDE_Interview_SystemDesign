@@ -37,6 +37,8 @@ namespace AdvancedDesigns
             _ring.AddNode(nodeId);
         }
 
+        // Test helpers that simulate network partitions by marking a node unreachable.
+        // In production, node liveness is detected automatically via a gossip protocol.
         public void SimulateNodeDown(string nodeId) => _downNodes.Add(nodeId);
         public void SimulateNodeUp(string nodeId)   => _downNodes.Remove(nodeId);
 

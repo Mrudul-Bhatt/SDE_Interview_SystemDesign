@@ -29,6 +29,9 @@ namespace AdvancedDesigns
                 _bits[pos] = true;
         }
 
+        // "Definitely not" = any bit position is unset → item was never added.
+        // "Probably yes"   = all positions set → item was added, OR a hash collision.
+        // This asymmetry is the core Bloom filter guarantee: no false negatives, only false positives.
         public bool MightContain(string item)
             => GetPositions(item).All(pos => _bits[pos]);
 
