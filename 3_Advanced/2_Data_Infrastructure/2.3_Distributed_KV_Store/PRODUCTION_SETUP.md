@@ -293,20 +293,340 @@ This is how DynamoDB achieves "always writable" — it never refuses a write due
 
 ---
 
+## Cross-cutting concerns not modelled in this project
+
+The sections above replace specific classes. The concerns below are global — they don't map to a single file but every production system must address them.
+
+### 1. Observability — metrics, tracing, logging
+
+**Problem:** With dozens of nodes serving millions of ops/sec, you cannot diagnose a slow read by reading logs. You need quantitative signals and request-level traces.
+
+**Metrics (Prometheus / OpenTelemetry):**
+
+```
+# Per-node histograms
+kvstore_read_latency_seconds{quantile="0.99"}    p99 read latency
+kvstore_write_latency_seconds{quantile="0.99"}   p99 write latency
+kvstore_memtable_bytes                            current MemTable size
+kvstore_sstables_total{level="L0"}                count per level
+kvstore_compaction_pending_bytes                  compaction backlog
+kvstore_bloom_filter_false_positive_ratio         FP rate (target < 1%)
+kvstore_cache_hit_ratio{cache="block"}            block cache hit ratio
+kvstore_quorum_failures_total                     writes that missed W
+kvstore_read_repair_total                         how often stale replicas seen
+```
+
+Dashboards alert when p99 latency > SLO, compaction backlog grows unboundedly, or cache hit ratio drops (signals working set exceeds RAM).
+
+**Distributed tracing (Jaeger / Zipkin / Honeycomb):**
+
+```
+Trace ID: abc-123  (propagated across all RPCs)
+  Span 1: Coordinator.Get(user:1)             8ms
+    Span 2: NodeA.Get RPC                     3ms
+      Span 3: MemTable lookup                 0.1ms
+      Span 4: L0 SSTable check (Bloom miss)   0.05ms
+      Span 5: L1 SSTable read (block cache hit) 0.2ms
+    Span 6: NodeB.Get RPC                     4ms
+      ...
+```
+
+A single request becomes a tree of spans across nodes. When a tail-latency alert fires, you find the exact slow span and the exact node responsible.
+
+**Structured logging:**
+
+JSON logs with consistent fields (`request_id`, `node_id`, `key_hash`, `latency_ms`) so they can be queried in Elasticsearch / Splunk / Datadog. Plain-text logs are unsearchable at scale.
+
+---
+
+### 2. Security — TLS, authentication, encryption at rest
+
+**Problem in this project:** Nodes accept any incoming RPC with no auth. The disk format is plaintext. A stolen disk = stolen data.
+
+**Inter-node TLS (mTLS):**
+
+```
+NodeA ↔ NodeB:
+  Both present X.509 certs signed by the cluster CA.
+  Both verify the peer cert before exchanging any data.
+  All traffic encrypted via TLS 1.3.
+```
+
+Without mTLS, anyone who can reach the gRPC port can join the cluster, read everything, and corrupt state. Issue per-node certs via Vault or cert-manager (Kubernetes).
+
+**Client authentication:**
+
+```
+Client → Coordinator
+  Authorization: Bearer eyJhbGc...   ← short-lived JWT issued by IDP
+  → coordinator validates signature + expiry
+  → extracts tenant_id, role
+  → enforces per-tenant key namespace and rate limits
+```
+
+**Authorization (per-key ACLs):**
+
+In multi-tenant systems, key prefixes encode ownership:
+
+```
+tenant_a:user:42  → readable/writable only by tenant_a
+tenant_b:user:42  → completely isolated, even though the same suffix
+```
+
+The coordinator rejects requests where the JWT tenant claim doesn't match the key's prefix.
+
+**Encryption at rest:**
+
+Each SSTable block is encrypted with AES-256-GCM before being written to disk. Keys come from a KMS (AWS KMS, Vault Transit). Lost disk → unreadable ciphertext. Required for SOC 2, HIPAA, PCI-DSS.
+
+**Audit log:**
+
+Every admin action (node add/remove, schema change, key deletion) is appended to a tamper-evident audit log (often a separate append-only WAL signed with HMAC). Forensic requirement for compliance.
+
+---
+
+### 3. Backup & disaster recovery
+
+**Problem in this project:** No backup mechanism. A corrupted SSTable or a `DELETE` from a buggy client is permanent and unrecoverable.
+
+**Snapshots — point-in-time copies:**
+
+```
+1. Trigger snapshot at time T
+2. Each node hard-links all current SSTables into snapshots/snap_T/
+   (hard links: zero extra disk space until compaction touches the original)
+3. Hard-link the WAL position
+4. Upload snapshot to S3 / GCS in the background
+```
+
+SSTables are immutable — hard-linking is the magic trick that makes snapshots cheap. Compaction creates NEW files; the snapshot still references the old ones.
+
+**Point-in-time recovery (PITR):**
+
+```
+Restore = snapshot_T0 + replay WAL from T0 to target_time
+```
+
+The WAL is shipped to object storage in real time. To restore to "5 minutes ago", load the most recent snapshot and replay WAL entries up to that timestamp.
+
+**Cross-region replication:**
+
+```
+Primary region (us-east-1)  → SSTable + WAL → S3 cross-region replication
+                                                       ↓
+                                              Standby region (us-west-2)
+                                              (warm — can take over in minutes)
+```
+
+For active-active multi-region, see the geo-replication section below.
+
+---
+
+### 4. Multi-region / geo-replication
+
+**Problem in this project:** All nodes assumed to be in one datacenter with sub-ms latency. Cross-region latency is 60–200ms — a synchronous quorum across regions would make every write painful.
+
+**Replication strategy per consistency need:**
+
+```
+Region-local strong consistency (recommended default):
+  RF=3 in us-east-1     (synchronous W=2, R=2)
+  RF=3 in us-west-2     (synchronous W=2, R=2)
+  Cross-region: ASYNC replication via streaming log
+
+  Pro:    fast local reads/writes (single-DC latency)
+  Con:    cross-region read sees up to ~seconds of staleness
+```
+
+**Conflict resolution across regions:**
+
+Two regions can independently write the same key. Resolution options:
+- **Last-write-wins** by Hybrid Logical Clock (HLC) — simple, may lose writes
+- **CRDTs** — counters, sets, OR-maps merge deterministically without conflict
+- **Multi-version with client reconciliation** — return all conflicting versions, client picks
+
+DynamoDB Global Tables use LWW. Riak and AntidoteDB use CRDTs. Cosmos DB exposes all four.
+
+**Datacenter-aware placement:**
+
+Modify the ring so that the N=3 replicas are spread across 3 racks (or 3 AZs). A whole-rack failure still leaves data available:
+
+```
+Key "user:1" → [rack1.NodeA, rack2.NodeB, rack3.NodeC]
+              ↑ not [rack1.NodeA, rack1.NodeB, rack1.NodeC] ←
+              because losing rack1 = total data loss for this key
+```
+
+Cassandra calls this `NetworkTopologyStrategy`.
+
+---
+
+### 5. Client SDK & connection management
+
+**Problem in this project:** Clients are imaginary. There is no SDK, no retry policy, no connection pool.
+
+**Production client SDK responsibilities:**
+
+```csharp
+var client = KvClient.Connect(
+    seeds: new[] { "kv-1.prod:9000", "kv-2.prod:9000" },  // bootstrap nodes
+    apiKey: "...",
+    pool:    new PoolConfig { Min=4, Max=32, IdleSec=60 },
+    retry:   RetryPolicy.ExponentialBackoff(maxAttempts: 3, jitterMs: 50),
+    timeout: TimeSpan.FromMilliseconds(200)
+);
+
+await client.PutAsync("user:1", "Alice", consistency: Consistency.Quorum);
+```
+
+**Key SDK features:**
+
+1. **Topology discovery** — bootstrap from a few seed nodes, then learn the full ring from gossip. No DNS round-robin required.
+2. **Token-aware routing** — SDK hashes the key locally and contacts the primary node directly, skipping the coordinator hop. Cuts one network round-trip.
+3. **Connection pooling** — persistent HTTP/2 multiplexed connections per node. Opening TCP per request would dominate latency.
+4. **Retry with backoff + jitter** — retry transient failures (network blips, transient quorum failures), give up on permanent ones (auth failure). Jitter prevents thundering-herd retries.
+5. **Idempotency tokens** — for `PUT`, include a client-generated UUID. If the request is retried, the server dedups based on the token within a TTL window (5 min). Prevents double-write on network timeouts.
+6. **Per-request consistency override** — `Consistency.One` for cache-style fast reads, `Consistency.Quorum` for strong reads, `Consistency.All` for the strongest possible guarantee.
+
+---
+
+### 6. Operational tooling
+
+**Problem in this project:** Adding a node just inserts it into a `Dictionary`. Real cluster ops are complex.
+
+**Adding a node (bootstrapping):**
+
+```
+1. New node joins gossip as STATE=joining
+2. Computes which key ranges it now owns (from updated ring)
+3. Streams those ranges from current owners (the "bootstrap stream")
+   → ~hours for a 1TB node — throttled to avoid impacting live traffic
+4. When all ranges are caught up, transitions to STATE=normal
+5. Ring now serves reads from the new node
+```
+
+The streaming uses a separate low-priority network channel so live reads/writes aren't starved.
+
+**Decommissioning a node:**
+
+```
+1. Mark node as STATE=leaving in gossip
+2. Stream the node's data to the successors that will take over
+3. When complete, remove from ring
+4. Other nodes drop replicas of keys that no longer belong to them
+```
+
+Never just kill a node — its replicas may be the only surviving copies of keys whose other replicas are also down.
+
+**Rebalancing:**
+
+If load distribution becomes skewed (some nodes 80% full, others 30%), redistribute virtual nodes to even out ownership. Cassandra calls this `nodetool repair --rebalance`.
+
+**Schema/format migrations:**
+
+```
+Old SSTable format → new SSTable format:
+  Strategy 1: read-time compatibility (read both formats, write only new)
+  Strategy 2: rolling rewrite (background process rewrites old SSTables)
+  Strategy 3: forced compaction with new format (write amplification spike)
+```
+
+Never break the old format — old SSTables still on disk would become unreadable.
+
+---
+
+### 7. Rate limiting & hot-key handling
+
+**Problem in this project:** A single malicious or buggy client can hammer one node into oblivion. One hot key (e.g., a celebrity's profile) can saturate its 3 replicas while other nodes idle.
+
+**Per-tenant rate limiting:**
+
+Token bucket per (tenant_id, operation) at the coordinator:
+
+```
+tenant_a: 10 000 ops/sec, burst 50 000
+  → token bucket refills at 10k/s, cap 50k
+  → exceeded → return 429 Too Many Requests
+```
+
+Prevents one tenant from starving others (the "noisy neighbour" problem in multi-tenant systems).
+
+**Hot-key detection:**
+
+Maintain a top-K counter (Count-Min Sketch) at each node:
+
+```
+Every 60s, report top 10 keys by access count to the coordinator.
+If a key receives > 10× the median load → flag as HOT.
+```
+
+**Hot-key mitigation:**
+
+1. **Replica fan-out** — temporarily increase the read-replica count for the hot key (RF=10 instead of 3) so reads spread across more nodes.
+2. **Edge caching** — push hot keys to a CDN-like edge cache with short TTL (1–5s). Eliminates the underlying storage hit entirely.
+3. **Client-side caching** — coordinator hints to clients "this key is hot, cache locally for 1s". DynamoDB DAX works this way.
+
+**Write-side backpressure:**
+
+If MemTable flushes can't keep up with write rate, the WAL grows unboundedly. Apply backpressure:
+
+```
+MemTable size > 80% of flush threshold → throttle writes (delay 1ms each)
+MemTable size > 95% of flush threshold → reject writes (503 Service Unavailable)
+```
+
+Better to slow down or reject than to OOM and crash.
+
+---
+
+### 8. Capacity planning & sizing
+
+**Sizing rules of thumb for an LSM KV store:**
+
+```
+RAM per node = MemTable + block cache + Bloom filters + OS page cache
+  MemTable        =  2 × flush_threshold (active + immutable)   ~256 MB
+  Block cache     = ~30% of node RAM                            ~10 GB on 32GB node
+  Bloom filters   = ~1.25 GB per 1B keys at 10 bits/key         (kept resident)
+  OS page cache   = remainder                                   ~15 GB
+
+Disk per node:
+  Working SSTable space        = ~2 × raw data (compaction overhead)
+  WAL retention                = ~1 GB rolling
+  Snapshots                    = ~1 × raw data
+  Headroom for compaction     = ~30% free at all times (else compaction stalls)
+
+Network per node:
+  Replication traffic = (RF - 1) × write_rate
+    e.g. 100 MB/s writes × (3-1) = 200 MB/s replication outbound
+  Read repair       = ~5–10% of read traffic
+  Gossip            = constant ~10 KB/s per node-pair
+```
+
+**Watch for these capacity smells:**
+
+- Compaction backlog growing → disk I/O bottleneck, will eventually stall writes
+- Block cache hit ratio < 80% → working set exceeds RAM, latency will climb
+- Free disk < 30% → compaction starves, writes stall
+- Cross-region replication lag > 10s → async replication can't keep up with write rate
+
+---
+
 ## The Full Production Picture
 
 ```
-Client PUT "user:1" = "Alice"
-      ↓
+Client SDK (token-aware, connection-pooled, retries with jitter)
+      ↓ mTLS + JWT auth, idempotency token, consistency level
 Coordinator (gRPC server)
+  → Rate-limit check (per-tenant token bucket)
   → ConsistentHashRing.GetNodes("user:1", RF=3) = [NodeA, NodeB, NodeC]
   → gRPC: NodeA.Put(), NodeB.Put()  (W=2 quorum)
-  → NodeC is down → store hint on NodeD
+  → NodeC is down → store hint on NodeD (hinted handoff)
         ↓ each node:
       WAL append  ← crash-safe, sequential disk write
       Concurrent MemTable write (lock-free skip list)
-      MemTable full? → flush to L0 SSTable (real file on disk)
-      Background compaction: L0→L1→L2 (merge, sort, compress)
+      MemTable full? → flush to L0 SSTable (real file on disk, AES-256 encrypted)
+      Background compaction: L0→L1→L2 (merge, sort, LZ4-compressed)
 
 Client GET "user:1"
       ↓
@@ -315,15 +635,30 @@ Client GET "user:1"
       Check MemTable (RAM)
       Check L0 SSTables (Bloom filter → block cache → disk)
       Check L1, L2... (one file per level, binary search)
-  → Compare timestamps → return latest
+  → Compare timestamps (HLC) → return latest
   → Read repair: update any stale replica
 
-Background processes (always running):
-  Gossip     → cluster membership, failure detection
-  Compaction → merge SSTables, reclaim space
-  Anti-entropy (Merkle tree) → reconcile replica drift
-  Hint replay → deliver buffered writes to recovered nodes
-  TTL cleanup → remove expired entries during compaction
+Background processes (always running, every node):
+  Gossip (SWIM)        → cluster membership, failure detection
+  Compaction           → merge SSTables, reclaim space
+  Anti-entropy (Merkle)→ reconcile replica drift
+  Hint replay          → deliver buffered writes to recovered nodes
+  TTL cleanup          → remove expired entries during compaction
+  Snapshot + WAL ship  → continuous backup to object storage
+  Cross-region stream  → async replication to standby regions
+  Hot-key detection    → top-K counter, escalate replica fan-out
+
+Cluster-wide observability (always-on):
+  Prometheus metrics   → latency p50/p99, cache hit ratio, compaction lag
+  Distributed tracing  → per-request trace across all hops
+  Structured logs      → request_id, tenant_id, key_hash for searchability
+  Audit log            → tamper-evident record of every admin action
+
+Operator workflows (occasional, controlled):
+  Node add/remove      → ring update + bootstrap stream
+  Rebalance            → vnode redistribution
+  Schema migration     → rolling format upgrade
+  PITR restore         → snapshot + WAL replay to target timestamp
 ```
 
-The core logic (LSM tree, consistent hashing, quorum reads/writes, Bloom filters, tombstones) carries forward unchanged — only the infrastructure changes from in-process simulation to a real distributed system with network I/O, disk persistence, and fault tolerance.
+The core logic (LSM tree, consistent hashing, quorum reads/writes, Bloom filters, tombstones) carries forward unchanged — only the infrastructure changes from in-process simulation to a real distributed system with network I/O, disk persistence, fault tolerance, security, observability, and operability.
