@@ -53,9 +53,9 @@ namespace AdvancedDesigns
 
         public ProduceResult(string topic, int partition, long offset)
         {
-            Topic     = topic;
+            Topic = topic;
             Partition = partition;
-            Offset    = offset;
+            Offset = offset;
         }
     }
 }

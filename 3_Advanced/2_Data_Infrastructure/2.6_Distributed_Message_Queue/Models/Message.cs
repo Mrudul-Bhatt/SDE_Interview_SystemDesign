@@ -74,7 +74,7 @@ namespace AdvancedDesigns
 
         public Message(string key, string value)
         {
-            Key   = key;
+            Key = key;
             Value = value;
             // Offset and Partition are intentionally left as defaults (0) here.
             // They will be stamped with real values by PartitionLog.Append().
