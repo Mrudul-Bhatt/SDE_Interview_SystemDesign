@@ -40,7 +40,7 @@ namespace AdvancedDesigns
     public class FeedPage
     {
         // The hydrated Post objects for this page — full content, ready to render.
-        // These are fetched from PostStore in a batch lookup after the FeedCache
+        // These are fetched from PostStoreCassandra in a batch lookup after the FeedCacheRedis
         // returns the ordered list of PostIds for this cursor window.
         public List<Post> Posts { get; }
 

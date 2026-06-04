@@ -35,7 +35,7 @@ namespace AdvancedDesigns
 
     // ─── Follow Graph (simulates Redis SADD / SCARD / SMEMBERS) ──────────────
 
-    public class FollowGraph
+    public class FollowGraphRedis
     {
         private readonly Dictionary<string, HashSet<string>> _followers = new Dictionary<string, HashSet<string>>();
         private readonly Dictionary<string, HashSet<string>> _following = new Dictionary<string, HashSet<string>>();
@@ -79,7 +79,7 @@ namespace AdvancedDesigns
 
     // ─── Post Store (simulates Cassandra — indexed by author + time) ──────────
 
-    public class PostStore
+    public class PostStoreCassandra
     {
         private readonly Dictionary<string, Post> _postsById = new Dictionary<string, Post>();
         private readonly Dictionary<string, List<Post>> _postsByAuthor = new Dictionary<string, List<Post>>();
@@ -130,7 +130,7 @@ namespace AdvancedDesigns
         }
     }
 
-    public class FeedCache
+    public class FeedCacheRedis
     {
         private readonly Dictionary<string, List<FeedEntry>> _feeds = new Dictionary<string, List<FeedEntry>>();
         private const int MaxFeedSize = 1000;
@@ -163,7 +163,7 @@ namespace AdvancedDesigns
                 entries.RemoveAll(e => e.PostId == postId);
         }
 
-        public void RemoveAuthorFromFeed(string userId, string authorId, PostStore postStore)
+        public void RemoveAuthorFromFeed(string userId, string authorId, PostStoreCassandra postStore)
         {
             if (!_feeds.TryGetValue(userId, out var entries)) return;
             entries.RemoveAll(e =>
@@ -212,11 +212,11 @@ namespace AdvancedDesigns
 
     public class FanOutService
     {
-        private readonly FollowGraph _graph;
-        private readonly FeedCache _cache;
-        private readonly PostStore _postStore;
+        private readonly FollowGraphRedis _graph;
+        private readonly FeedCacheRedis _cache;
+        private readonly PostStoreCassandra _postStore;
 
-        public FanOutService(FollowGraph graph, FeedCache cache, PostStore postStore)
+        public FanOutService(FollowGraphRedis graph, FeedCacheRedis cache, PostStoreCassandra postStore)
         {
             _graph = graph;
             _cache = cache;
@@ -274,11 +274,11 @@ namespace AdvancedDesigns
 
     public class FeedService
     {
-        private readonly FollowGraph _graph;
-        private readonly FeedCache _cache;
-        private readonly PostStore _postStore;
+        private readonly FollowGraphRedis _graph;
+        private readonly FeedCacheRedis _cache;
+        private readonly PostStoreCassandra _postStore;
 
-        public FeedService(FollowGraph graph, FeedCache cache, PostStore postStore)
+        public FeedService(FollowGraphRedis graph, FeedCacheRedis cache, PostStoreCassandra postStore)
         {
             _graph = graph;
             _cache = cache;
@@ -348,11 +348,11 @@ namespace AdvancedDesigns
             Scenario5_FollowUnfollowFeedUpdate();
         }
 
-        static (FollowGraph, PostStore, FeedCache, FanOutService, FeedService) BuildSystem()
+        static (FollowGraphRedis, PostStoreCassandra, FeedCacheRedis, FanOutService, FeedService) BuildSystem()
         {
-            var graph = new FollowGraph();
-            var postStore = new PostStore();
-            var feedCache = new FeedCache();
+            var graph = new FollowGraphRedis();
+            var postStore = new PostStoreCassandra();
+            var feedCache = new FeedCacheRedis();
             var fanOut = new FanOutService(graph, feedCache, postStore);
             var feedSvc = new FeedService(graph, feedCache, postStore);
             return (graph, postStore, feedCache, fanOut, feedSvc);
@@ -413,7 +413,7 @@ namespace AdvancedDesigns
             var (graph, posts, cache, fanOut, feedSvc) = BuildSystem();
 
             // Create a celebrity (techguru) with 12 followers
-            string[] fans = { "u1","u2","u3","u4","u5","u6","u7","u8","u9","u10","u11","u12" };
+            string[] fans = { "u1", "u2", "u3", "u4", "u5", "u6", "u7", "u8", "u9", "u10", "u11", "u12" };
             foreach (var fan in fans) graph.Follow(fan, "techguru");
 
             Console.WriteLine($"techguru has {graph.GetFollowerCount("techguru")} followers");
@@ -506,11 +506,11 @@ namespace AdvancedDesigns
             var now = DateTime.UtcNow;
 
             // Mix of old viral post and new posts
-            var p1 = posts.CreatePost("alice", "Viral post from 3h ago",    now.AddHours(-3),  likes: 800, comments: 150, shares: 200);
-            var p2 = posts.CreatePost("bob",   "Decent post from 2h ago",   now.AddHours(-2),  likes: 40,  comments: 5);
-            var p3 = posts.CreatePost("carol", "Fresh post just now",        now.AddMinutes(-5), likes: 2);
-            var p4 = posts.CreatePost("alice", "Mildly interesting 1h ago", now.AddHours(-1),  likes: 120, comments: 30);
-            var p5 = posts.CreatePost("bob",   "Old but viral post 6h ago", now.AddHours(-6),  likes: 2000, comments: 500);
+            var p1 = posts.CreatePost("alice", "Viral post from 3h ago", now.AddHours(-3), likes: 800, comments: 150, shares: 200);
+            var p2 = posts.CreatePost("bob", "Decent post from 2h ago", now.AddHours(-2), likes: 40, comments: 5);
+            var p3 = posts.CreatePost("carol", "Fresh post just now", now.AddMinutes(-5), likes: 2);
+            var p4 = posts.CreatePost("alice", "Mildly interesting 1h ago", now.AddHours(-1), likes: 120, comments: 30);
+            var p5 = posts.CreatePost("bob", "Old but viral post 6h ago", now.AddHours(-6), likes: 2000, comments: 500);
 
             foreach (var p in new[] { p1, p2, p3, p4, p5 }) fanOut.OnPost(p);
 
@@ -524,12 +524,12 @@ namespace AdvancedDesigns
             var chronoFeed = feedSvc.GetFeed("viewer", count: 5, algorithmic: false);
             Console.WriteLine("\nChronological feed (newest first):");
             for (int i = 0; i < chronoFeed.Posts.Count; i++)
-                Console.WriteLine($"  #{i+1} {chronoFeed.Posts[i].Content}");
+                Console.WriteLine($"  #{i + 1} {chronoFeed.Posts[i].Content}");
 
             var algoFeed = feedSvc.GetFeed("viewer", count: 5, algorithmic: true, authorAffinity: affinity);
             Console.WriteLine("\nAlgorithmic feed (engagement × decay × affinity):");
             for (int i = 0; i < algoFeed.Posts.Count; i++)
-                Console.WriteLine($"  #{i+1} {algoFeed.Posts[i].Content}");
+                Console.WriteLine($"  #{i + 1} {algoFeed.Posts[i].Content}");
 
             Console.WriteLine("  (Old viral post rises; fresh but unengaged post falls; alice's posts boosted by affinity)");
             Console.WriteLine();

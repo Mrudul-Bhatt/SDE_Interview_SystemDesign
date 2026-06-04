@@ -6,7 +6,7 @@
 // that tells the librarian where to file it among the other cards.
 //
 // When Bob opens his feed, the system reads his cache of FeedEntries (just IDs and
-// scores — tiny), then fetches the full Post objects from PostStore in one batch
+// scores — tiny), then fetches the full Post objects from PostStoreCassandra in one batch
 // lookup. Two separate concerns:
 //   Feed cache  → "which posts, in what order?" (FeedEntry list, kept in Redis)
 //   Post store  → "what is the content of post X?" (Post objects, kept in a DB)
@@ -19,7 +19,7 @@
 //
 // Indirection also means correctness for free: if Alice edits her post after fan-out,
 // every follower's feed automatically reflects the edit on next read, because all
-// those FeedEntries still point to the same single Post object in PostStore.
+// those FeedEntries still point to the same single Post object in PostStoreCassandra.
 // No cache invalidation needed.
 //
 // WHY SCORE (not just a timestamp field)?
@@ -32,7 +32,7 @@
 //     → sort by Score descending = "most interesting posts first"
 //     (FeedRanker computes this from likes, comments, shares, and time-decay)
 //
-// FeedCache stores and sorts by Score without caring which mode produced it.
+// FeedCacheRedis stores and sorts by Score without caring which mode produced it.
 // This means switching from chronological to algorithmic (or back) is just a
 // matter of which Score value gets written at fan-out time — the cache itself
 // doesn't change.
@@ -50,7 +50,7 @@ namespace AdvancedDesigns
     {
         // The lightweight pointer to the actual post. Only this ID is stored in the
         // feed cache; the full Post (content, likes, comments) is fetched separately
-        // from PostStore when the feed is rendered. Keeps the cache small and
+        // from PostStoreCassandra when the feed is rendered. Keeps the cache small and
         // allows post edits to propagate without touching any FeedEntry.
         public string PostId { get; }
 

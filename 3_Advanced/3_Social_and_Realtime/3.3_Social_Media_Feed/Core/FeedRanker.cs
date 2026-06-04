@@ -85,11 +85,10 @@ namespace AdvancedDesigns
         // tie-breaking is still applied via the freshness floor).
         //
         // In production this runs on a pre-filtered candidate set (~hundreds of posts),
-        // not the full corpus. The feed pipeline fetches candidates from FeedCache and
-        // PostStore, then calls Rank to impose the final ordering before returning to
+        // not the full corpus. The feed pipeline fetches candidates from FeedCacheRedis and
+        // PostStoreCassandra, then calls Rank to impose the final ordering before returning to
         // the client. Running it on millions of posts would be too slow.
-        public static List<Post> Rank(IEnumerable<Post> posts,
-            Dictionary<string, double> authorAffinity = null)
+        public static List<Post> Rank(IEnumerable<Post> posts, Dictionary<string, double> authorAffinity = null)
         {
             return posts
                 .Select(p =>

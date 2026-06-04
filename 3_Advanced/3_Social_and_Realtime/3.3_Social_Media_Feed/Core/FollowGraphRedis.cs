@@ -1,4 +1,4 @@
-// FollowGraph — the directed social graph: who follows whom.
+// FollowGraphRedis — the directed social graph: who follows whom.
 //
 // THE BIG IDEA:
 // Think of the follow graph like a city's one-way street map. "Alice follows Bob"
@@ -42,7 +42,7 @@ using System.Linq;
 
 namespace AdvancedDesigns
 {
-    public class FollowGraph
+    public class FollowGraphRedis
     {
         // "who follows X?" — keyed by the person being followed.
         // Used exclusively by the fan-out path: given an author, get their audience.
@@ -97,19 +97,19 @@ namespace AdvancedDesigns
 
         // The gate for the hybrid fan-out decision. FanOutService calls this once per
         // author before deciding whether to push to caches or skip. If true, the post
-        // is stored in PostStore only and pulled at read time by GetCelebrityFollows.
+        // is stored in PostStoreCassandra only and pulled at read time by GetCelebrityFollows.
         public bool IsCelebrity(string userId) => GetFollowerCount(userId) >= CelebrityThreshold;
 
         // Returns the subset of people Bob follows who are celebrities. Used by
         // FeedService at read time to fetch each celebrity's recent posts from
-        // PostStore and merge them into Bob's feed alongside his pre-computed cache.
+        // PostStoreCassandra and merge them into Bob's feed alongside his pre-computed cache.
         // In production this set is also cached (Redis SET) because it changes rarely.
         public IEnumerable<string> GetCelebrityFollows(string userId) =>
             GetFollowing(userId).Where(IsCelebrity);
 
         // Returns the subset of people Bob follows who are NOT celebrities — the authors
         // whose posts were already pushed into Bob's feed cache at write time. FeedService
-        // does NOT need to fetch these from PostStore; their PostIds are already in FeedCache.
+        // does NOT need to fetch these from PostStoreCassandra; their PostIds are already in FeedCache.
         public IEnumerable<string> GetRegularFollows(string userId) =>
             GetFollowing(userId).Where(f => !IsCelebrity(f));
 

@@ -41,7 +41,7 @@ namespace AdvancedDesigns
         public string PostId { get; }
 
         // Who wrote the post. The celebrity check is done on this ID against
-        // the FollowGraph — if their follower count exceeds the threshold,
+        // the FollowGraphRedis — if their follower count exceeds the threshold,
         // WasCelebrity is true and no feed caches are updated.
         public string AuthorId { get; }
 
