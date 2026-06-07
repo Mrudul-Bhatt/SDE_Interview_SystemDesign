@@ -83,7 +83,7 @@ sequenceDiagram
     loop each backlog message
         S->>C: deliver (mark Delivered)
     end
-    Note over C,S: socket stays open; client pings Heartbeat every ~10s
+    Note over C,S: socket stays open — client pings Heartbeat every 10s
 ```
 
 ## ② Send to an ONLINE user — `A → B` (different servers)
@@ -127,7 +127,7 @@ sequenceDiagram
     S1->>PUSH: Send(C, preview)  ✓ Sent
     PUSH-->>C: notification (wake device)
     S1-->>A: SendResult { OnlineDelivered: 0, PushSent: 1 }
-    Note over C,CASS: later — C reopens app → flow ① drains backlog from Cassandra
+    Note over C,CASS: later — C reopens app, the connect flow drains the backlog from Cassandra
 ```
 
 ---
