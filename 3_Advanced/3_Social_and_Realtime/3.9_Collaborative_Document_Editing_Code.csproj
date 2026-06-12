@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="3.9_Collaborative_Document_Editing_Code.cs" />
+    <Compile Include="3.9_Collaborative_Document_Editing/**/*.cs" />
   </ItemGroup>
 </Project>

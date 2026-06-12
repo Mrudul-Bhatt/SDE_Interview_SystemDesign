@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="4.3_Video_Streaming_Code.cs" />
+    <Compile Include="4.3_Video_Streaming/**/*.cs" />
   </ItemGroup>
 </Project>

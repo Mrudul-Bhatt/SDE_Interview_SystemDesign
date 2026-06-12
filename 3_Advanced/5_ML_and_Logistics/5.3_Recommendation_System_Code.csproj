@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="5.3_Recommendation_System_Code.cs" />
+    <Compile Include="5.3_Recommendation_System/**/*.cs" />
   </ItemGroup>
 </Project>

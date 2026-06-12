@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="5.6_Ridesharing_Backend_Code.cs" />
+    <Compile Include="5.6_Ridesharing_Backend/**/*.cs" />
   </ItemGroup>
 </Project>

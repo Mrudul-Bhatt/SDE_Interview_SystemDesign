@@ -7,6 +7,6 @@
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="4.6_Payment_Processing_Code.cs" />
+    <Compile Include="4.6_Payment_Processing/**/*.cs" />
   </ItemGroup>
 </Project>

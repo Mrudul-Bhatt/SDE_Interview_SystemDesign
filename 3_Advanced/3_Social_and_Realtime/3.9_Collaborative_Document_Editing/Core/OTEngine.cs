@@ -27,6 +27,8 @@
 // no coordination. The client with the smaller ClientId gets the lower position;
 // the other shifts one step right.
 
+using System;
+
 namespace AdvancedDesigns
 {
     public static class OTEngine
