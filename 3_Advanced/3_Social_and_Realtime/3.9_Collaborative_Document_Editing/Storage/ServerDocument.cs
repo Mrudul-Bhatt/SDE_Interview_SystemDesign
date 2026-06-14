@@ -85,8 +85,7 @@ namespace AdvancedDesigns
         //   GetOpsSince(1) → [(2,Insert), (3,NoOp)]              ← alice catching up
         //   GetOpsSince(2) → [(3,NoOp)]                          ← bob catching up
         //   GetOpsSince(3) → []                                  ← fully synced
-        private readonly List<(int version, TextOp op, string clientId)> _opLog
-            = new List<(int, TextOp, string)>();
+        private readonly List<(int version, TextOp op, string clientId)> _opLog = [];
 
         // Exposes the current text snapshot for read-only access by CollabServer
         // (e.g., to send to a freshly connecting client as their initial state).

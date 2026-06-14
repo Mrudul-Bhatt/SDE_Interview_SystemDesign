@@ -84,7 +84,7 @@ namespace AdvancedDesigns
             Console.WriteLine($"  All converged: {alice.LocalText == server.CurrentText && bob.LocalText == server.CurrentText}");
 
             Console.WriteLine("\nServer transform log:");
-            foreach (var line in server.Log()) Console.WriteLine($"  {line}");
+            foreach (var line in server.GetLog()) Console.WriteLine($"  {line}");
             Console.WriteLine();
         }
 
@@ -119,7 +119,7 @@ namespace AdvancedDesigns
             Console.WriteLine($"  All converged: {alice.LocalText == server.CurrentText && bob.LocalText == server.CurrentText}");
 
             Console.WriteLine("\nServer transform log:");
-            foreach (var line in server.Log()) Console.WriteLine($"  {line}");
+            foreach (var line in server.GetLog()) Console.WriteLine($"  {line}");
             Console.WriteLine();
         }
 
@@ -154,7 +154,7 @@ namespace AdvancedDesigns
             Console.WriteLine($"  All converged: {alice.LocalText == server.CurrentText && bob.LocalText == server.CurrentText}");
 
             Console.WriteLine("\nServer transform log:");
-            foreach (var line in server.Log()) Console.WriteLine($"  {line}");
+            foreach (var line in server.GetLog()) Console.WriteLine($"  {line}");
             Console.WriteLine();
         }
 
@@ -199,7 +199,7 @@ namespace AdvancedDesigns
             Console.WriteLine($"  All 3 clients converged: {converged}");
 
             Console.WriteLine("\nServer transform log:");
-            foreach (var line in server.Log()) Console.WriteLine($"  {line}");
+            foreach (var line in server.GetLog()) Console.WriteLine($"  {line}");
         }
     }
 }
