@@ -58,7 +58,7 @@ public class VideoMetadata
     // list (not null) so callers can safely iterate without a null check.
     // In production: stored as a Cassandra SET<text>; Elasticsearch indexes each
     // tag as a keyword so "exact tag" search is O(1) rather than a substring scan.
-    public List<string> Tags { get; set; } = new List<string>();
+    public List<string> Tags { get; set; } = [];
 
     // The current lifecycle state — see Enums.cs for the full state machine.
     // VideoMetaStore.Search() and .Trending() filter to Status == Ready so that
