@@ -94,7 +94,7 @@ using System.Collections.Generic;
 
 public static class BitrateTable
 {
-    public static readonly Dictionary<Rendition, int> Kbps = new Dictionary<Rendition, int>
+    public static readonly Dictionary<Rendition, int> Kbps = new()
     {
         { Rendition.R360p,    400 },   // SD    — 3G/weak signal floor
         { Rendition.R480p,    800 },   // SD+   — LTE minimum comfortable

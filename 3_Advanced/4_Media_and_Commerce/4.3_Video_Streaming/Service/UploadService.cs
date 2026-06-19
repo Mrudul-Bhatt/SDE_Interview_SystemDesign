@@ -79,7 +79,7 @@ public class UploadService
     // UploadId during the upload phase). O(1) lookup on every chunk receive.
     // Sessions are never explicitly expired in this demo; production adds a TTL
     // (e.g., 24 hours) to reclaim memory for abandoned uploads.
-    private readonly Dictionary<string, UploadSession> _sessions = new Dictionary<string, UploadSession>();
+    private readonly Dictionary<string, UploadSession> _sessions = [];
 
     // Stands in for a Kafka topic in production. Complete() publishes here; a pool
     // of TranscodeWorkers subscribes. Decoupling the two lets each tier auto-scale
@@ -126,17 +126,17 @@ public class UploadService
     //     → client receives UploadSession and stores uploadId + videoId locally
     public UploadSession Init(string uploaderId, string filename, long totalSize, int chunkSize = 5 * 1024 * 1024)
     {
-        var videoId  = Guid.NewGuid().ToString("N")[..12];
+        var videoId = Guid.NewGuid().ToString("N")[..12];
         var uploadId = Guid.NewGuid().ToString("N")[..8];
 
         var session = new UploadSession
         {
-            UploadId     = uploadId,
-            VideoId      = videoId,
-            UploaderId   = uploaderId,
+            UploadId = uploadId,
+            VideoId = videoId,
+            UploaderId = uploaderId,
             OriginalName = filename,
-            TotalSize    = totalSize,
-            TotalChunks  = (int)Math.Ceiling((double)totalSize / chunkSize)
+            TotalSize = totalSize,
+            TotalChunks = (int)Math.Ceiling((double)totalSize / chunkSize)
         };
         _sessions[uploadId] = session;
         return session;
@@ -175,7 +175,7 @@ public class UploadService
     public bool ReceiveChunk(string uploadId, int chunkIndex, byte[] data)
     {
         if (!_sessions.TryGetValue(uploadId, out var session)) return false;
-        if (data == null || data.Length == 0)                  return false;
+        if (data == null || data.Length == 0) return false;
 
         session.ReceivedChunks.Add(chunkIndex); // idempotent: re-adding same index is a no-op
         Console.WriteLine($"  [Upload] {uploadId} chunk {chunkIndex}/{session.TotalChunks - 1} received");
