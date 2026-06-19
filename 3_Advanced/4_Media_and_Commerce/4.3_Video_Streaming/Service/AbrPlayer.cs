@@ -31,22 +31,22 @@ using System.Linq;
 
 public class AbrPlayer
 {
-    private readonly CdnEdgeCache  _cdn;
-    private readonly WatchHistory  _history;
-    private readonly ViewCounter   _counter;
+    private readonly CdnEdgeCache _cdn;
+    private readonly WatchHistory _history;
+    private readonly ViewCounter _counter;
     private Rendition _currentQuality = Rendition.R720p;
-    private double    _bufferSeconds  = 5.0;  // startup buffer
+    private double _bufferSeconds = 5.0;  // startup buffer
     private const double BufferTarget = 20.0; // cap; player stops pre-buffering past this
 
-    public string UserId  { get; }
+    public string UserId { get; }
     public string VideoId { get; }
     public int PositionSeconds { get; private set; }
 
     public AbrPlayer(string userId, string videoId, CdnEdgeCache cdn, WatchHistory history, ViewCounter counter)
     {
-        UserId  = userId;
+        UserId = userId;
         VideoId = videoId;
-        _cdn    = cdn;
+        _cdn = cdn;
         _history = history;
         _counter = counter;
 
@@ -74,8 +74,8 @@ public class AbrPlayer
             // The segment URL is computed client-side from (videoId, quality, index) — no lookup.
             var url = new HlsSegment
             {
-                VideoId      = VideoId,
-                Quality      = _currentQuality,
+                VideoId = VideoId,
+                Quality = _currentQuality,
                 SegmentIndex = PositionSeconds / 6
             }.Url;
 
@@ -89,9 +89,9 @@ public class AbrPlayer
             // Buffer dynamics: downloading drains the buffer, then 6s of playback is added.
             double downloadTimeSec = (double)BitrateTable.Kbps[_currentQuality] / simulatedThroughputKbps * 6.0;
             _bufferSeconds -= downloadTimeSec;
-            _bufferSeconds  = Math.Max(_bufferSeconds, 0);
+            _bufferSeconds = Math.Max(_bufferSeconds, 0);
             _bufferSeconds += 6;
-            _bufferSeconds  = Math.Min(_bufferSeconds, BufferTarget);
+            _bufferSeconds = Math.Min(_bufferSeconds, BufferTarget);
 
             PositionSeconds += 6;
 

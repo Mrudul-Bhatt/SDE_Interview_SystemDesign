@@ -29,9 +29,9 @@ public class CdnEdgeCache
 
     // Local copies, keyed exactly as the origin keys them (segment URL, videoId).
     private readonly Dictionary<string, HlsSegment> _cache = [];
-    private readonly Dictionary<string, string>     _manifestCache = [];
+    private readonly Dictionary<string, string> _manifestCache = [];
 
-    public int Hits   { get; private set; }
+    public int Hits { get; private set; }
     public int Misses { get; private set; }
 
     public CdnEdgeCache(HlsStore origin) { _origin = origin; }

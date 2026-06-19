@@ -32,8 +32,8 @@ using System.Text;
 
 public class TranscodeWorker
 {
-    private readonly RawVideoStore  _raw;
-    private readonly HlsStore       _hls;
+    private readonly RawVideoStore _raw;
+    private readonly HlsStore _hls;
     private readonly VideoMetaStore _meta;
 
     // Fixed segment duration. AbrPlayer relies on it (SegmentIndex = PositionSeconds / 6),
@@ -42,8 +42,8 @@ public class TranscodeWorker
 
     public TranscodeWorker(RawVideoStore raw, HlsStore hls, VideoMetaStore meta)
     {
-        _raw  = raw;
-        _hls  = hls;
+        _raw = raw;
+        _hls = hls;
         _meta = meta;
     }
 
@@ -63,7 +63,7 @@ public class TranscodeWorker
 
         // ToList() so we can enumerate the renditions twice (segment loop + BuildManifest).
         var targetRenditions = renditions?.ToList()
-            ?? new List<Rendition> { Rendition.R360p, Rendition.R480p, Rendition.R720p, Rendition.R1080p };
+            ?? [Rendition.R360p, Rendition.R480p, Rendition.R720p, Rendition.R1080p];
 
         // Ceiling so a trailing partial segment still gets its own index.
         int numSegments = (int)Math.Ceiling((double)durationSeconds / SegmentSeconds);
@@ -76,11 +76,11 @@ public class TranscodeWorker
             {
                 var seg = new HlsSegment
                 {
-                    VideoId      = videoId,
-                    Quality      = r,
+                    VideoId = videoId,
+                    Quality = r,
                     SegmentIndex = i,
-                    BitrateKbps  = BitrateTable.Kbps[r], // self-describing: AbrPlayer reads it directly
-                    Data         = new byte[] { (byte)r, (byte)i, 0xAB, 0xCD } // stub bytes
+                    BitrateKbps = BitrateTable.Kbps[r], // self-describing: AbrPlayer reads it directly
+                    Data = [(byte)r, (byte)i, 0xAB, 0xCD] // stub bytes
                 };
                 _hls.StoreSegment(seg);
             }
@@ -94,13 +94,13 @@ public class TranscodeWorker
         // Step 3: flip Ready last — the atomic "go live" gate.
         _meta.Upsert(new VideoMetadata
         {
-            VideoId         = videoId,
-            UploaderId      = uploaderId,
-            Title           = title,
-            Status          = VideoStatus.Ready,
+            VideoId = videoId,
+            UploaderId = uploaderId,
+            Title = title,
+            Status = VideoStatus.Ready,
             DurationSeconds = durationSeconds,
-            CreatedAt       = DateTime.UtcNow,
-            ManifestUrl     = $"hls/{videoId}/manifest.m3u8"
+            CreatedAt = DateTime.UtcNow,
+            ManifestUrl = $"hls/{videoId}/manifest.m3u8"
         });
 
         Console.WriteLine($"  [Transcode] {videoId} READY — manifest written");

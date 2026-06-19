@@ -56,7 +56,7 @@ public class ViewCounter
         foreach (var kv in _heartbeats)
         {
             var videoId = kv.Key.Split(':')[1];
-            var beats   = kv.Value;
+            var beats = kv.Value;
 
             if (beats.Count > 0 && beats.Max() - beats.Min() >= MinPlaybackSeconds)
             {

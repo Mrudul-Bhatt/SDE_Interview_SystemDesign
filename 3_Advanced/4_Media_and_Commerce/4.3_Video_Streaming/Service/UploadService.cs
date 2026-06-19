@@ -44,17 +44,17 @@ public class UploadService
     // round-trips (smaller = more requests) against retry cost (bigger = re-send more on a drop).
     public UploadSession Init(string uploaderId, string filename, long totalSize, int chunkSize = 5 * 1024 * 1024)
     {
-        var videoId  = Guid.NewGuid().ToString("N")[..12];
+        var videoId = Guid.NewGuid().ToString("N")[..12];
         var uploadId = Guid.NewGuid().ToString("N")[..8];
-        var session  = new UploadSession
+        var session = new UploadSession
         {
-            UploadId     = uploadId,
-            VideoId      = videoId,
-            UploaderId   = uploaderId,
+            UploadId = uploadId,
+            VideoId = videoId,
+            UploaderId = uploaderId,
             OriginalName = filename,
-            TotalSize    = totalSize,
+            TotalSize = totalSize,
             // Ceiling so the last partial chunk gets its own index (11 MB / 5 MB = 3 chunks).
-            TotalChunks  = (int)Math.Ceiling((double)totalSize / chunkSize)
+            TotalChunks = (int)Math.Ceiling((double)totalSize / chunkSize)
         };
         _sessions[uploadId] = session;
         return session;
@@ -66,7 +66,7 @@ public class UploadService
     public bool ReceiveChunk(string uploadId, int chunkIndex, byte[] data)
     {
         if (!_sessions.TryGetValue(uploadId, out var session)) return false;
-        if (data == null || data.Length == 0)                  return false;
+        if (data == null || data.Length == 0) return false;
 
         session.ReceivedChunks.Add(chunkIndex);
         Console.WriteLine($"  [Upload] {uploadId} chunk {chunkIndex}/{session.TotalChunks - 1} received");
