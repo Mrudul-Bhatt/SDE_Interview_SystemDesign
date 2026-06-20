@@ -85,7 +85,7 @@ sequenceDiagram
     participant TQ as Transcode Queue
 
     C->>US: Init("alice", "vacation.mp4", 15 MB)
-    US->>US: mint VideoId + UploadId; TotalChunks = ceil(15MB / 5MB) = 3
+    US->>US: mint VideoId + UploadId; TotalChunks = ceil(15MB ÷ 5MB) = 3
     US-->>C: UploadSession { VideoId="x9y8z7", UploadId="a1b2", TotalChunks=3 }
     Note over C: client stores VideoId → stable public URL even before bytes land
 
