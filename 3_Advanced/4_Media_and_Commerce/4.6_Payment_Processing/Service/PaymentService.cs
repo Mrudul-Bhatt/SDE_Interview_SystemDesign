@@ -1,24 +1,41 @@
-// PaymentService — the orchestrator that runs the charge → capture → settle pipeline.
+// PaymentService — the orchestrator that runs the charge -> capture -> settle -> refund flow.
 //
-// Charge flow (order matters):
-//   1. Idempotency check — return cached result if we've seen this key before.
-//      MUST be first, before any side effects.
-//   2. Validate card token via the vault.
-//   3. Fraud score → Allow / Review / Block.
-//   4. Card network Authorize (the slow remote call).
-//   5. Persist the Payment row in Authorized state.
-//   6. Write the ledger entries (debit customer / credit suspense).
-//   7. Store the idempotency result so retries return this same payment.
-//   8. Enqueue the webhook.
+// THE BIG IDEA:
+// This is the brain that wires every other component together in the right order. The hard part
+// of payments isn't any single step — it's doing them in a sequence that stays correct even when
+// requests are retried or run concurrently. Three invariants carry the whole design:
+//   - Idempotency: a retried Charge never charges twice (check first, store result last).
+//   - Optimistic locking: concurrent Capture/Refund can't double-spend (Version CAS).
+//   - Balanced ledger: every call posts debits that equal its credits.
 //
-// Capture / Refund use optimistic locking (Version-based) so concurrent
-// requests can't double-spend the authorization or over-refund a capture.
-// Refunds are bounded by RemainingRefundable to prevent negative balances.
+// WHY THE CHARGE ORDER IS FIXED (and idempotency is stored LAST):
+//   1 idempotency check  -> return cached result if we've seen this key (before any side effect)
+//   2 validate token     -> reject junk before doing real work
+//   3 fraud score        -> cheap local Block before the slow bank call
+//   4 authorize (bank)   -> the slow remote leg
+//   5 persist Payment    -> durable record in Authorized state
+//   6 write ledger       -> balanced entries for the hold
+//   7 store idempotency  -> LAST, only after side effects are committed. If we stored it earlier
+//                           and then crashed, a retry would get "already done" for a charge that
+//                           never finished. Storing last means a mid-flight crash leaves no key,
+//                           so the retry safely redoes the charge.
+//   8 notify webhook
 //
-// Ledger entries are always BALANCED inside each call: every debit has a
-// matching credit. Refund posts 4 entries (debit merchant full, credit customer
-// full, debit platform fee, credit merchant fee-return) so the platform's fee
-// is correctly reversed too.
+// WHY CAPTURE/REFUND CAPTURE Version BEFORE MUTATING: they read expectedVersion, mutate, bump it,
+// and PaymentStore.Update commits only if no one else advanced the row — the loser retries.
+// Refund is additionally bounded by RemainingRefundable so it can't exceed what was captured.
+//
+// HOW IT BEHAVES AT RUNTIME (Scenario 1: $100 charge -> capture -> settle; fee 2.9% = $2.90):
+//
+//   Call                | Payment after        | ledger entries posted (balanced)
+//   --------------------|----------------------|-----------------------------------------
+//   Charge(order-1001)  | Authorized, v1       | DEBIT customer 10000 / CREDIT suspense 10000
+//   Capture(pay)        | Captured, v2         | DEBIT suspense 10000 /
+//                       |   CapturedCents=10000|   CREDIT merchant 9710 + CREDIT platform 290
+//   Settle(pay)         | Settled, v3          | DEBIT merchant 9710 / CREDIT bank 9710
+//
+//   Fraud Block (Scen 3) / decline (Scen 4) short-circuit: Payment saved Blocked/Failed,
+//   idempotency stored, failure webhook queued, no authorization ledger entries written.
 
 using System;
 
@@ -32,7 +49,7 @@ public class PaymentService
     private readonly LedgerService       _ledger;
     private readonly WebhookService      _webhooks;
 
-    private const double PlatformFeeRate = 0.029;  // 2.9%
+    private const double PlatformFeeRate = 0.029;  // 2.9% platform fee, taken at capture
 
     public PaymentService(IdempotencyStore idem, CardVault vault, FraudScorer fraud,
         CardNetworkGateway network, PaymentStore payments, LedgerService ledger, WebhookService webhooks)
@@ -48,7 +65,7 @@ public class PaymentService
 
     public ChargeResult Charge(ChargeRequest req)
     {
-        // Step 1: Idempotency check — return cached result if seen before
+        // Step 1: idempotency FIRST — a retry returns the cached result, never a second charge.
         var existing = _idem.TryGet(req.MerchantId, req.IdempotencyKey);
         if (existing != null)
         {
@@ -58,11 +75,11 @@ public class PaymentService
                                       Status = cachedPayment.Status, WasIdempotent = true };
         }
 
-        // Step 2: Validate card token
+        // Step 2: reject an invalid/unknown card token before doing real work.
         if (!_vault.IsValid(req.CardToken))
             return Fail(req, "INVALID_CARD_TOKEN");
 
-        // Step 3: Fraud check
+        // Step 3: fraud score — a local Block here avoids the slow bank call entirely.
         var (decision, score, reasons) = _fraud.Score(req.FraudCtx);
         Console.WriteLine($"  [Fraud] score={score} decision={decision}" +
                           (reasons.Count > 0 ? $" reasons=[{string.Join(", ", reasons)}]" : ""));
@@ -76,7 +93,7 @@ public class PaymentService
                                       Status = PaymentStatus.Blocked, Error = "PAYMENT_DECLINED" };
         }
 
-        // Step 4: Authorize with card network
+        // Step 4: authorize with the card network (the slow remote leg).
         var pan = _vault.Detokenize(req.CardToken);
         var (authOk, authRef, authErr) = _network.Authorize(pan, req.AmountCents);
 
@@ -89,17 +106,17 @@ public class PaymentService
                                       Status = PaymentStatus.Failed, Error = authErr };
         }
 
-        // Step 5: Record authorized payment
+        // Step 5: persist the authorized payment.
         var paymentId = CreatePayment(req, PaymentStatus.Authorized, authRef);
 
-        // Step 6: Write balanced ledger entries for authorization
+        // Step 6: balanced ledger entries for the hold (customer owes; suspense holds it).
         _ledger.Record(paymentId, new[]
         {
             ("customer:" + req.CustomerId, "DEBIT",  req.AmountCents, "Authorization hold"),
             ("suspense",                   "CREDIT", req.AmountCents, "Authorization hold")
         });
 
-        // Step 7: Store idempotency result LAST (after side effects committed)
+        // Step 7: store the idempotency result LAST — after all side effects are committed.
         _idem.Store(req.MerchantId, req.IdempotencyKey, paymentId, "AUTHORIZED");
 
         Notify(req, paymentId, "payment.authorized");
@@ -109,6 +126,7 @@ public class PaymentService
                                   Status = PaymentStatus.Authorized };
     }
 
+    // Turn the hold into a real charge. Guarded by status + optimistic lock.
     public (bool ok, string error) Capture(string paymentId)
     {
         var payment = _payments.Get(paymentId);
@@ -118,7 +136,7 @@ public class PaymentService
         var (ok, captureErr) = _network.Capture(payment.AuthReference, payment.AmountCents);
         if (!ok) return (false, captureErr);
 
-        // Optimistic lock — capture expectedVersion BEFORE mutation
+        // Capture expectedVersion BEFORE mutating, so the Update below is a compare-and-swap.
         int expectedVersion = payment.Version;
         long fee       = (long)(payment.AmountCents * PlatformFeeRate);
         long netAmount = payment.AmountCents - fee;
@@ -130,7 +148,7 @@ public class PaymentService
         if (!_payments.Update(payment, expectedVersion))
             return (false, "CONCURRENT_UPDATE — retry");
 
-        // Write balanced capture entries: suspense → merchant net + platform fee
+        // Release the hold and split the money: merchant gets net, platform keeps the fee.
         _ledger.Record(paymentId, new[]
         {
             ("suspense",                        "DEBIT",  payment.AmountCents, "Capture — release hold"),
@@ -143,6 +161,7 @@ public class PaymentService
         return (true, null);
     }
 
+    // Wire the merchant's net to their bank account.
     public (bool ok, string error) Settle(string paymentId)
     {
         var payment = _payments.Get(paymentId);
@@ -176,7 +195,7 @@ public class PaymentService
             payment.Status != PaymentStatus.PartiallyRefunded)
             return (false, null, $"INVALID_STATUS:{payment.Status}");
 
-        // Hard guard: refund must fit within what's been captured but not yet refunded
+        // Hard guard: never refund more than what's captured-but-not-yet-refunded.
         if (refundCents > payment.RemainingRefundable)
             return (false, null, $"REFUND_EXCEEDS_CAPTURED: requested={refundCents} remaining={payment.RemainingRefundable}");
 
@@ -187,13 +206,14 @@ public class PaymentService
 
         int expectedVersion = payment.Version;
         payment.RefundedCents += refundCents;
+        // Fully refunded once cumulative refunds reach the captured amount; partial until then.
         payment.Status = payment.RefundedCents >= payment.CapturedCents
             ? PaymentStatus.Refunded
             : PaymentStatus.PartiallyRefunded;
         payment.Version++;
         _payments.Update(payment, expectedVersion);
 
-        // Balanced refund: 2 debits + 2 credits, each side sums to refundCents+feeRefund
+        // Balanced refund (4 entries): return the money AND reverse the platform fee proportionally.
         _ledger.Record(paymentId, new[]
         {
             ("merchant:" + payment.MerchantId, "DEBIT",  refundCents,"Refund — debit merchant (full)"),
@@ -209,6 +229,7 @@ public class PaymentService
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
+    // Mints a payment id and saves the row at Version=1.
     private string CreatePayment(ChargeRequest req, PaymentStatus status, string authRef = null)
     {
         var id = "pay_" + Guid.NewGuid().ToString("N")[..8];
@@ -228,6 +249,7 @@ public class PaymentService
         return id;
     }
 
+    // Queues a status-change webhook for the merchant (delivery handled by WebhookService).
     private void Notify(ChargeRequest req, string paymentId, string eventName)
     {
         var url = req?.MerchantUrl ?? _payments.Get(paymentId)?.MerchantId + "/webhook";

@@ -1,15 +1,27 @@
-// ReconciliationJob — nightly check that our books match the bank's.
+// ReconciliationJob — the nightly check that our ledger matches what the bank actually moved.
 //
-// Three discrepancy classes to handle:
-//   IN_LEDGER_ONLY:  we recorded a settlement, bank hasn't reported it yet.
-//                    Usually benign (next-day timing); flag if it lingers.
-//   IN_BANK_ONLY:    bank reports money we have no record of. ALWAYS investigate
-//                    — could be a missed capture event or, worse, a duplicate.
-//   MISMATCH:        amounts disagree. Likely an FX rounding error or a fee
-//                    calculation drift. Auto-correct small deltas, alert on big.
+// THE BIG IDEA:
+// Our ledger records what we THINK happened; the bank's settlement report records what REALLY
+// moved. They can drift — a dropped capture, a duplicate, an FX rounding error. Reconciliation
+// cross-checks the two and flags every discrepancy. This is the safety net auditors depend on.
 //
-// In production this also reconciles processor fees, interchange splits, and
-// per-currency conversion rates. Auditors live or die by this report.
+// Three discrepancy classes (each handled differently):
+//   IN_LEDGER_ONLY  - we recorded a settlement the bank hasn't reported yet. Usually benign
+//                     next-day timing; only worrying if it lingers.
+//   IN_BANK_ONLY    - the bank moved money we have no record of. ALWAYS investigate — a missed
+//                     capture event, or worse, a duplicate.
+//   MISMATCH        - both sides have it but the amounts differ. Likely fee/FX drift; auto-fix
+//                     small deltas, alert on large ones.
+//
+// HOW IT BEHAVES AT RUNTIME (Scenario 7: one settled $100 payment + a mystery bank row):
+//
+//   Source comparison                                  | classification
+//   ---------------------------------------------------|------------------------------
+//   ledger bank:settlement pay_X = 9710  vs bank 9710  | matched
+//   bank row pay_unknown99 = 2000, no ledger entry     | IN_BANK_ONLY -> INVESTIGATE
+//
+//   Result: matched=1  missing_in_bank=0  mismatches=0  bank_only=1  (ledger still balanced)
+//   (9710 = $100 capture minus the 2.9% fee — the net actually wired, so the amounts agree.)
 
 using System.Collections.Generic;
 using System.Linq;
@@ -29,16 +41,17 @@ public class ReconciliationJob
     {
         System.Console.WriteLine("\n  [Reconcile] Starting nightly reconciliation...");
 
-        // Internal: all settlement ledger entries (credit side = money sent to bank)
+        // Our side: every settlement we recorded (the CREDIT to bank:settlement = money sent out).
         var internalSettlements = _ledger.AllEntries
             .Where(e => e.AccountId == "bank:settlement" && e.EntryType == "CREDIT")
             .ToDictionary(e => e.PaymentId, e => e.AmountCents);
 
+        // Their side: keyed by RefId for O(1) lookup.
         var bankLookup = bankRecords.ToDictionary(r => r.RefId, r => r.AmountCents);
 
         int matched = 0, missingInBank = 0, missingInLedger = 0, mismatch = 0;
 
-        // Pass 1: every ledger settlement should have a bank counterpart
+        // Pass 1: every ledger settlement should have a matching bank row with the same amount.
         foreach (var (paymentId, internalAmt) in internalSettlements)
         {
             if (!bankLookup.TryGetValue(paymentId, out var bankAmt))
@@ -57,7 +70,7 @@ public class ReconciliationJob
             }
         }
 
-        // Pass 2: anything in the bank report we don't recognize is suspicious
+        // Pass 2: anything in the bank report we don't recognize is suspicious — investigate.
         foreach (var (refId, bankAmt) in bankLookup)
         {
             if (!internalSettlements.ContainsKey(refId))
