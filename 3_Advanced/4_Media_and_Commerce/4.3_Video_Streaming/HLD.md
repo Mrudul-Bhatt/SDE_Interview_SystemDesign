@@ -85,7 +85,8 @@ sequenceDiagram
     participant TQ as Transcode Queue
 
     C->>US: Init("alice", "vacation.mp4", 15 MB)
-    US->>US: mint VideoId + UploadId; TotalChunks = ceil(15MB ÷ 5MB) = 3
+    US->>US: mint VideoId + UploadId
+    Note over US: TotalChunks = 3 — 15 MB file at 5 MB per chunk
     US-->>C: UploadSession { VideoId="x9y8z7", UploadId="a1b2", TotalChunks=3 }
     Note over C: client stores VideoId → stable public URL even before bytes land
 
@@ -101,9 +102,9 @@ sequenceDiagram
     US-->>C: true  (ReceivedChunks = {0,1,2}, IsComplete=true)
 
     C->>US: Complete(uploadId, fullData)
-    US->>US: guard IsComplete? → true (don't trust client; verify the set)
+    US->>US: guard IsComplete? → true (don't trust client, verify the set)
     US->>RAW: Store("x9y8z7", fullData)   ← master archived, once, ever
-    US->>TQ: Enqueue("x9y8z7")            ← async hand-off; does NOT transcode inline
+    US->>TQ: Enqueue("x9y8z7")            ← async hand-off, does NOT transcode inline
     US-->>C: (ok=true, videoId="x9y8z7")
 ```
 
