@@ -9,21 +9,21 @@ public class Program
     public static void Main()
     {
         // Wire up services
-        var vault    = new CardVault();
-        var idem     = new IdempotencyStore();
-        var fraud    = new FraudScorer();
-        var network  = new CardNetworkGateway("4111111111111111"); // this PAN is "declined"
+        var vault = new CardVault();
+        var idem = new IdempotencyStore();
+        var fraud = new FraudScorer();
+        var network = new CardNetworkGateway("4111111111111111"); // this PAN is "declined"
         var payments = new PaymentStore();
-        var ledger   = new LedgerService();
+        var ledger = new LedgerService();
         var webhooks = new WebhookService(
             new Dictionary<string, string> { ["merchant1"] = "whsec_abc123", ["merchant2"] = "whsec_xyz999" },
             "merchant2"  // merchant2's endpoint is failing
         );
-        var svc      = new PaymentService(idem, vault, fraud, network, payments, ledger, webhooks);
-        var recon    = new ReconciliationJob(ledger, payments);
+        var svc = new PaymentService(idem, vault, fraud, network, payments, ledger, webhooks);
+        var recon = new ReconciliationJob(ledger, payments);
 
         // Tokenize test cards
-        var goodToken     = vault.Tokenize("4000000000000000");  // valid card
+        var goodToken = vault.Tokenize("4000000000000000");  // valid card
         var declinedToken = vault.Tokenize("4111111111111111");  // bank declines
 
         Console.WriteLine("=== Scenario 1: Happy Path — Authorize → Capture → Settle ===\n");
@@ -31,23 +31,23 @@ public class Program
             var req = new ChargeRequest
             {
                 IdempotencyKey = "order-1001",
-                MerchantId     = "merchant1",
-                CustomerId     = "customer-alice",
-                CardToken      = goodToken,
-                AmountCents    = 10000,  // $100.00
-                Currency       = "USD",
-                MerchantUrl    = "https://merchant1.example.com/webhook",
+                MerchantId = "merchant1",
+                CustomerId = "customer-alice",
+                CardToken = goodToken,
+                AmountCents = 10000,  // $100.00
+                Currency = "USD",
+                MerchantUrl = "https://merchant1.example.com/webhook",
                 FraudCtx = new FraudContext
                 {
-                    CustomerId     = "customer-alice",
-                    CardToken      = goodToken,
-                    AmountCents    = 10000,
-                    IpAddress      = "1.2.3.4",
-                    Country        = "US",
+                    CustomerId = "customer-alice",
+                    CardToken = goodToken,
+                    AmountCents = 10000,
+                    IpAddress = "1.2.3.4",
+                    Country = "US",
                     FailedAttempts = 0,
-                    AvsMatch       = true,
-                    CvvMatch       = true,
-                    AvgOrderCents  = 8000
+                    AvsMatch = true,
+                    CvvMatch = true,
+                    AvgOrderCents = 8000
                 }
             };
 
@@ -72,17 +72,21 @@ public class Program
             var req = new ChargeRequest
             {
                 IdempotencyKey = "order-1002",
-                MerchantId     = "merchant1",
-                CustomerId     = "customer-bob",
-                CardToken      = goodToken,
-                AmountCents    = 5000,
-                Currency       = "USD",
-                MerchantUrl    = "https://merchant1.example.com/webhook",
+                MerchantId = "merchant1",
+                CustomerId = "customer-bob",
+                CardToken = goodToken,
+                AmountCents = 5000,
+                Currency = "USD",
+                MerchantUrl = "https://merchant1.example.com/webhook",
                 FraudCtx = new FraudContext
                 {
-                    CustomerId = "customer-bob", CardToken = goodToken,
-                    AmountCents = 5000, Country = "US",
-                    AvsMatch = true, CvvMatch = true, AvgOrderCents = 4000
+                    CustomerId = "customer-bob",
+                    CardToken = goodToken,
+                    AmountCents = 5000,
+                    Country = "US",
+                    AvsMatch = true,
+                    CvvMatch = true,
+                    AvgOrderCents = 4000
                 }
             };
 
@@ -99,22 +103,22 @@ public class Program
             var req = new ChargeRequest
             {
                 IdempotencyKey = "order-1003",
-                MerchantId     = "merchant1",
-                CustomerId     = "customer-fraudster",
-                CardToken      = goodToken,
-                AmountCents    = 200000,  // $2000 — 25× their average
-                Currency       = "USD",
-                MerchantUrl    = "https://merchant1.example.com/webhook",
+                MerchantId = "merchant1",
+                CustomerId = "customer-fraudster",
+                CardToken = goodToken,
+                AmountCents = 200000,  // $2000 — 25× their average
+                Currency = "USD",
+                MerchantUrl = "https://merchant1.example.com/webhook",
                 FraudCtx = new FraudContext
                 {
-                    CustomerId     = "customer-fraudster",
-                    CardToken      = goodToken,
-                    AmountCents    = 200000,
-                    Country        = "XX",         // high-risk country
+                    CustomerId = "customer-fraudster",
+                    CardToken = goodToken,
+                    AmountCents = 200000,
+                    Country = "XX",         // high-risk country
                     FailedAttempts = 6,             // velocity exceeded
-                    AvsMatch       = false,
-                    CvvMatch       = false,
-                    AvgOrderCents  = 8000
+                    AvsMatch = false,
+                    CvvMatch = false,
+                    AvgOrderCents = 8000
                 }
             };
 
@@ -127,17 +131,21 @@ public class Program
             var req = new ChargeRequest
             {
                 IdempotencyKey = "order-1004",
-                MerchantId     = "merchant1",
-                CustomerId     = "customer-carol",
-                CardToken      = declinedToken,
-                AmountCents    = 3000,
-                Currency       = "USD",
-                MerchantUrl    = "https://merchant1.example.com/webhook",
+                MerchantId = "merchant1",
+                CustomerId = "customer-carol",
+                CardToken = declinedToken,
+                AmountCents = 3000,
+                Currency = "USD",
+                MerchantUrl = "https://merchant1.example.com/webhook",
                 FraudCtx = new FraudContext
                 {
-                    CustomerId = "customer-carol", CardToken = declinedToken,
-                    AmountCents = 3000, Country = "US",
-                    AvsMatch = true, CvvMatch = true, AvgOrderCents = 2500
+                    CustomerId = "customer-carol",
+                    CardToken = declinedToken,
+                    AmountCents = 3000,
+                    Country = "US",
+                    AvsMatch = true,
+                    CvvMatch = true,
+                    AvgOrderCents = 2500
                 }
             };
 
@@ -151,17 +159,21 @@ public class Program
             var req = new ChargeRequest
             {
                 IdempotencyKey = "order-1005",
-                MerchantId     = "merchant1",
-                CustomerId     = "customer-dave",
-                CardToken      = goodToken,
-                AmountCents    = 15000,  // $150
-                Currency       = "USD",
-                MerchantUrl    = "https://merchant1.example.com/webhook",
+                MerchantId = "merchant1",
+                CustomerId = "customer-dave",
+                CardToken = goodToken,
+                AmountCents = 15000,  // $150
+                Currency = "USD",
+                MerchantUrl = "https://merchant1.example.com/webhook",
                 FraudCtx = new FraudContext
                 {
-                    CustomerId = "customer-dave", CardToken = goodToken,
-                    AmountCents = 15000, Country = "US",
-                    AvsMatch = true, CvvMatch = true, AvgOrderCents = 12000
+                    CustomerId = "customer-dave",
+                    CardToken = goodToken,
+                    AmountCents = 15000,
+                    Country = "US",
+                    AvsMatch = true,
+                    CvvMatch = true,
+                    AvgOrderCents = 12000
                 }
             };
 
@@ -189,7 +201,7 @@ public class Program
             webhooks.ProcessDue();
 
             var delivered = webhooks.GetByStatus("DELIVERED");
-            var pending   = webhooks.GetByStatus("PENDING");
+            var pending = webhooks.GetByStatus("PENDING");
             Console.WriteLine($"  Delivered: {delivered.Count}  Still pending (retry): {pending.Count}");
         }
 
@@ -199,9 +211,9 @@ public class Program
             var settledPayments = payments.GetByStatus(PaymentStatus.Settled);
             var bankReport = settledPayments.Select(p => new BankSettlementRecord
             {
-                RefId       = p.PaymentId,
+                RefId = p.PaymentId,
                 AmountCents = p.CapturedCents - (long)(p.CapturedCents * 0.029),
-                Currency    = p.Currency
+                Currency = p.Currency
             }).ToList();
 
             // Add a mystery bank record not in our ledger

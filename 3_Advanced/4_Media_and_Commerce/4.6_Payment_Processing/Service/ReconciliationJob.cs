@@ -29,12 +29,10 @@ using System.Linq;
 public class ReconciliationJob
 {
     private readonly LedgerService _ledger;
-    private readonly PaymentStore _payments;
 
     public ReconciliationJob(LedgerService ledger, PaymentStore payments)
     {
         _ledger = ledger;
-        _payments = payments;
     }
 
     public void Run(List<BankSettlementRecord> bankRecords)

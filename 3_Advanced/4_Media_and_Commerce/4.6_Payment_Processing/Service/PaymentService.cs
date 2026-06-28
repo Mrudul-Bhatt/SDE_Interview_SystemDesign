@@ -41,25 +41,25 @@ using System;
 
 public class PaymentService
 {
-    private readonly IdempotencyStore    _idem;
-    private readonly CardVault           _vault;
-    private readonly FraudScorer         _fraud;
-    private readonly CardNetworkGateway  _network;
-    private readonly PaymentStore        _payments;
-    private readonly LedgerService       _ledger;
-    private readonly WebhookService      _webhooks;
+    private readonly IdempotencyStore _idem;
+    private readonly CardVault _vault;
+    private readonly FraudScorer _fraud;
+    private readonly CardNetworkGateway _network;
+    private readonly PaymentStore _payments;
+    private readonly LedgerService _ledger;
+    private readonly WebhookService _webhooks;
 
     private const double PlatformFeeRate = 0.029;  // 2.9% platform fee, taken at capture
 
     public PaymentService(IdempotencyStore idem, CardVault vault, FraudScorer fraud,
         CardNetworkGateway network, PaymentStore payments, LedgerService ledger, WebhookService webhooks)
     {
-        _idem     = idem;
-        _vault    = vault;
-        _fraud    = fraud;
-        _network  = network;
+        _idem = idem;
+        _vault = vault;
+        _fraud = fraud;
+        _network = network;
         _payments = payments;
-        _ledger   = ledger;
+        _ledger = ledger;
         _webhooks = webhooks;
     }
 
@@ -71,8 +71,13 @@ public class PaymentService
         {
             var cachedPayment = _payments.Get(existing.PaymentId);
             Console.WriteLine($"  [Payment] Idempotency HIT for key={req.IdempotencyKey} → returning cached result");
-            return new ChargeResult { Success = true, PaymentId = existing.PaymentId,
-                                      Status = cachedPayment.Status, WasIdempotent = true };
+            return new ChargeResult
+            {
+                Success = true,
+                PaymentId = existing.PaymentId,
+                Status = cachedPayment.Status,
+                WasIdempotent = true
+            };
         }
 
         // Step 2: reject an invalid/unknown card token before doing real work.
@@ -89,8 +94,13 @@ public class PaymentService
             var blockedId = CreatePayment(req, PaymentStatus.Blocked);
             _idem.Store(req.MerchantId, req.IdempotencyKey, blockedId, "BLOCKED");
             Notify(req, blockedId, "payment.blocked");
-            return new ChargeResult { Success = false, PaymentId = blockedId,
-                                      Status = PaymentStatus.Blocked, Error = "PAYMENT_DECLINED" };
+            return new ChargeResult
+            {
+                Success = false,
+                PaymentId = blockedId,
+                Status = PaymentStatus.Blocked,
+                Error = "PAYMENT_DECLINED"
+            };
         }
 
         // Step 4: authorize with the card network (the slow remote leg).
@@ -102,19 +112,24 @@ public class PaymentService
             var failedId = CreatePayment(req, PaymentStatus.Failed);
             _idem.Store(req.MerchantId, req.IdempotencyKey, failedId, "FAILED");
             Notify(req, failedId, "payment.failed");
-            return new ChargeResult { Success = false, PaymentId = failedId,
-                                      Status = PaymentStatus.Failed, Error = authErr };
+            return new ChargeResult
+            {
+                Success = false,
+                PaymentId = failedId,
+                Status = PaymentStatus.Failed,
+                Error = authErr
+            };
         }
 
         // Step 5: persist the authorized payment.
         var paymentId = CreatePayment(req, PaymentStatus.Authorized, authRef);
 
         // Step 6: balanced ledger entries for the hold (customer owes; suspense holds it).
-        _ledger.Record(paymentId, new[]
-        {
+        _ledger.Record(paymentId,
+        [
             ("customer:" + req.CustomerId, "DEBIT",  req.AmountCents, "Authorization hold"),
             ("suspense",                   "CREDIT", req.AmountCents, "Authorization hold")
-        });
+        ]);
 
         // Step 7: store the idempotency result LAST — after all side effects are committed.
         _idem.Store(req.MerchantId, req.IdempotencyKey, paymentId, "AUTHORIZED");
@@ -122,8 +137,12 @@ public class PaymentService
         Notify(req, paymentId, "payment.authorized");
         Console.WriteLine($"  [Payment] {paymentId} AUTHORIZED for ${req.AmountCents / 100.0:F2} {req.Currency}");
 
-        return new ChargeResult { Success = true, PaymentId = paymentId,
-                                  Status = PaymentStatus.Authorized };
+        return new ChargeResult
+        {
+            Success = true,
+            PaymentId = paymentId,
+            Status = PaymentStatus.Authorized
+        };
     }
 
     // Turn the hold into a real charge. Guarded by status + optimistic lock.
@@ -138,10 +157,10 @@ public class PaymentService
 
         // Capture expectedVersion BEFORE mutating, so the Update below is a compare-and-swap.
         int expectedVersion = payment.Version;
-        long fee       = (long)(payment.AmountCents * PlatformFeeRate);
+        long fee = (long)(payment.AmountCents * PlatformFeeRate);
         long netAmount = payment.AmountCents - fee;
 
-        payment.Status        = PaymentStatus.Captured;
+        payment.Status = PaymentStatus.Captured;
         payment.CapturedCents = payment.AmountCents;
         payment.Version++;
 
@@ -149,12 +168,12 @@ public class PaymentService
             return (false, "CONCURRENT_UPDATE — retry");
 
         // Release the hold and split the money: merchant gets net, platform keeps the fee.
-        _ledger.Record(paymentId, new[]
-        {
+        _ledger.Record(paymentId,
+        [
             ("suspense",                        "DEBIT",  payment.AmountCents, "Capture — release hold"),
             ("merchant:" + payment.MerchantId,  "CREDIT", netAmount,           "Capture — merchant net"),
             ("platform:revenue",                "CREDIT", fee,                 "Capture — platform fee")
-        });
+        ]);
 
         Notify(null, paymentId, "payment.captured");
         Console.WriteLine($"  [Payment] {paymentId} CAPTURED — merchant nets ${netAmount / 100.0:F2}, fee ${fee / 100.0:F2}");
@@ -175,11 +194,11 @@ public class PaymentService
         payment.Version++;
         _payments.Update(payment, expectedVersion);
 
-        _ledger.Record(paymentId, new[]
-        {
+        _ledger.Record(paymentId,
+        [
             ("merchant:" + payment.MerchantId, "DEBIT",  netAmount, "Settlement wire"),
             ("bank:settlement",                "CREDIT", netAmount, "Settlement wire")
-        });
+        ]);
 
         Notify(null, paymentId, "payment.settled");
         Console.WriteLine($"  [Payment] {paymentId} SETTLED — ${netAmount / 100.0:F2} wired to bank");
@@ -191,7 +210,7 @@ public class PaymentService
         var payment = _payments.Get(paymentId);
         if (payment == null) return (false, null, "PAYMENT_NOT_FOUND");
         if (payment.Status != PaymentStatus.Captured &&
-            payment.Status != PaymentStatus.Settled  &&
+            payment.Status != PaymentStatus.Settled &&
             payment.Status != PaymentStatus.PartiallyRefunded)
             return (false, null, $"INVALID_STATUS:{payment.Status}");
 
@@ -214,13 +233,13 @@ public class PaymentService
         _payments.Update(payment, expectedVersion);
 
         // Balanced refund (4 entries): return the money AND reverse the platform fee proportionally.
-        _ledger.Record(paymentId, new[]
-        {
+        _ledger.Record(paymentId,
+        [
             ("merchant:" + payment.MerchantId, "DEBIT",  refundCents,"Refund — debit merchant (full)"),
             ("customer:" + payment.CustomerId, "CREDIT", refundCents,"Refund — credit customer"),
             ("platform:revenue",               "DEBIT",  feeRefund,  "Refund — reverse fee"),
             ("merchant:" + payment.MerchantId, "CREDIT", feeRefund,  "Refund — return fee to merchant")
-        });
+        ]);
 
         Notify(null, paymentId, "payment.refunded");
         Console.WriteLine($"  [Payment] {paymentId} REFUND ${refundCents / 100.0:F2} → status={payment.Status}");
@@ -235,15 +254,15 @@ public class PaymentService
         var id = "pay_" + Guid.NewGuid().ToString("N")[..8];
         _payments.Save(new Payment
         {
-            PaymentId     = id,
-            MerchantId    = req.MerchantId,
-            CustomerId    = req.CustomerId,
-            CardToken     = req.CardToken,
-            AmountCents   = req.AmountCents,
-            Currency      = req.Currency,
-            Status        = status,
-            Version       = 1,
-            CreatedAt     = DateTime.UtcNow,
+            PaymentId = id,
+            MerchantId = req.MerchantId,
+            CustomerId = req.CustomerId,
+            CardToken = req.CardToken,
+            AmountCents = req.AmountCents,
+            Currency = req.Currency,
+            Status = status,
+            Version = 1,
+            CreatedAt = DateTime.UtcNow,
             AuthReference = authRef
         });
         return id;
@@ -257,8 +276,7 @@ public class PaymentService
         _webhooks.Enqueue(req?.MerchantId ?? "merchant1", url ?? "/webhook", payload);
     }
 
-    private ChargeResult Fail(ChargeRequest req, string error) =>
-        new ChargeResult { Success = false, Error = error };
+    private ChargeResult Fail(ChargeRequest req, string error) => new() { Success = false, Error = error };
 
     // ──────────────────────────────────────────────────────────────────────────────────
     // WHAT THIS CLASS HOLDS AT RUNTIME:
