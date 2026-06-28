@@ -259,4 +259,25 @@ public class PaymentService
 
     private ChargeResult Fail(ChargeRequest req, string error) =>
         new ChargeResult { Success = false, Error = error };
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT THIS CLASS HOLDS AT RUNTIME:
+    //
+    // Nothing of its own — PaymentService is a STATELESS orchestrator. Its only fields are the
+    // collaborators it coordinates, plus one constant. The real per-payment state lives in the
+    // stores it writes to, NOT here:
+    //
+    //   _idem      ->  IdempotencyStore    (the retry cache)
+    //   _vault     ->  CardVault           (token <-> PAN)
+    //   _fraud     ->  FraudScorer         (risk scoring; itself stateless)
+    //   _network   ->  CardNetworkGateway  (the bank)
+    //   _payments  ->  PaymentStore        (durable payment rows)   <- charge state lives here
+    //   _ledger    ->  LedgerService       (the money trail)        <- and here
+    //   _webhooks  ->  WebhookService      (merchant notifications)
+    //   PlatformFeeRate = 0.029  (const, the 2.9% platform fee)
+    //
+    // Every Charge/Capture/Settle/Refund reads and writes those stores and keeps NO per-payment
+    // state between calls. That's why many PaymentService workers can share the same stores and
+    // behave identically — scaling out is safe because the state isn't in this object.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }

@@ -44,4 +44,78 @@ public class PaymentStore
 
     // Used by reconciliation (Scenario 7) to pull all Settled payments to match against the bank.
     public List<Payment> GetByStatus(PaymentStatus status) => _db.Values.Where(p => p.Status == status).ToList();
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT _db HOLDS AT RUNTIME (snapshot after all of Program.cs has run):
+    //
+    //   _db (paymentId -> Payment) = {
+    //     
+    //      // Scen 1: charged -> captured -> settled
+    //     
+    //      "pay_1a2b3c"  ->  { 
+    //                         Status=Settled,            
+    //                         Amount=10000, 
+    //                         Captured=10000, 
+    //                         Refunded=0,
+    //                         Version=3, 
+    //                         Merchant="merchant1", 
+    //                         Customer="customer-alice",
+    //                         AuthRef="AUTH_..." 
+    //                       }      
+    //     
+    // 
+    //
+    //      // Scen 2: charged once; the 2nd identical request hit idempotency, no new row
+    //
+    //      "pay_4d5e6f"  ->  {
+    //                         Status=Authorized,
+    //                         Amount=5000,
+    //                         Captured=0,
+    //                         Refunded=0,
+    //                         Version=1,
+    //                         Merchant="merchant1",
+    //                         Customer="customer-bob"
+    //                       }
+    //
+    //
+    //      // Scen 3: fraud blocked
+    //
+    //      "pay_7g8h9i"  ->  {
+    //                         Status=Blocked,
+    //                         Amount=200000,
+    //                         Captured=0,
+    //                         Refunded=0,
+    //                         Version=1,
+    //                         Customer="customer-fraudster"
+    //                       }
+    //
+    //
+    //      // Scen 4: card declined
+    //
+    //      "pay_0j1k2l"  ->  {
+    //                         Status=Failed,
+    //                         Amount=3000,
+    //                         Captured=0,
+    //                         Refunded=0,
+    //                         Version=1,
+    //                         Customer="customer-carol"
+    //                       }
+    //
+    //
+    //      // Scen 5: captured, two $50 refunds; Version bumped once per state change
+    //
+    //      "pay_3m4n5o"  ->  {
+    //                         Status=PartiallyRefunded,
+    //                         Amount=15000,
+    //                         Captured=15000,
+    //                         Refunded=10000,
+    //                         Version=4,
+    //                         Customer="customer-dave"
+    //                       }
+    //   }
+    //
+    // Reading the rows tells the whole story: Status is where each payment ended up, Version counts
+    // how many transitions it went through, and Captured/Refunded show how much money actually moved.
+    // Note there is NO row for the 2nd Scenario-2 charge — idempotency means one key = one Payment.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }

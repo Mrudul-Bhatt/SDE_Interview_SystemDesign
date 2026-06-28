@@ -64,4 +64,27 @@ public class FraudScorer
 
         return (decision, score, reasons);
     }
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT THIS CLASS HOLDS AT RUNTIME:
+    //
+    // Almost nothing — FraudScorer is STATELESS. Its only field is a fixed lookup of high-risk
+    // countries; it stores no per-charge data and remembers nothing between calls:
+    //
+    //   HighRiskCountries (static set) = { "XX", "ZZ" }
+    //
+    // Each Score(ctx) call computes a fresh result purely from the FraudContext passed in and
+    // returns it — same input always gives the same output (deterministic). Nothing is mutated.
+    //
+    // Example return for Scenario 3 (the fraudster):
+    //   ( decision = Block,
+    //     score    = 100,                                  // 40+20+30+50+25 = 165, capped at 100
+    //     reasons  = [ "CVV mismatch", "AVS mismatch",
+    //                  "High-risk country",
+    //                  "Velocity: 5+ failures in 10min",
+    //                  "Amount 10x customer average ..." ] )
+    //
+    // Holding no state is why one shared FraudScorer can score every charge concurrently and why
+    // it's trivially safe to scale out — there's nothing to keep in sync.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }

@@ -45,7 +45,7 @@ public class WebhookService
 
     public WebhookService(Dictionary<string, string> merchantSecrets, params string[] failingMerchants)
     {
-        _merchantSecrets  = merchantSecrets;
+        _merchantSecrets = merchantSecrets;
         _failingMerchants = [.. failingMerchants];
     }
 
@@ -54,14 +54,14 @@ public class WebhookService
     {
         _events.Add(new WebhookEvent
         {
-            EventId      = "evt_" + Guid.NewGuid().ToString("N")[..8],
-            MerchantId   = merchantId,
-            MerchantUrl  = merchantUrl,
-            Payload      = payload,
-            Status       = "PENDING",
+            EventId = "evt_" + Guid.NewGuid().ToString("N")[..8],
+            MerchantId = merchantId,
+            MerchantUrl = merchantUrl,
+            Payload = payload,
+            Status = "PENDING",
             AttemptCount = 0,
-            NextRetry    = DateTime.UtcNow,   // due now
-            CreatedAt    = DateTime.UtcNow
+            NextRetry = DateTime.UtcNow,   // due now
+            CreatedAt = DateTime.UtcNow
         });
     }
 
@@ -73,7 +73,7 @@ public class WebhookService
         {
             // Sign every attempt (the merchant verifies this). Delivery is simulated by the set.
             string signature = Sign(evt.Payload, _merchantSecrets.GetValueOrDefault(evt.MerchantId, "secret"));
-            bool delivered   = !_failingMerchants.Contains(evt.MerchantId);
+            bool delivered = !_failingMerchants.Contains(evt.MerchantId);
 
             evt.AttemptCount++;
             if (delivered)
@@ -90,22 +90,57 @@ public class WebhookService
             else
             {
                 // Schedule the next attempt further out.
-                int backoff    = BackoffSeconds[evt.AttemptCount - 1];
-                evt.NextRetry  = DateTime.UtcNow.AddSeconds(backoff);
+                int backoff = BackoffSeconds[evt.AttemptCount - 1];
+                evt.NextRetry = DateTime.UtcNow.AddSeconds(backoff);
                 Console.WriteLine($"  [Webhook] {evt.EventId} FAILED (attempt {evt.AttemptCount}), retry in {backoff}s");
             }
         }
     }
 
-    public List<WebhookEvent> GetByStatus(string status) =>
-        _events.Where(e => e.Status == status).ToList();
+    public List<WebhookEvent> GetByStatus(string status) => _events.Where(e => e.Status == status).ToList();
 
     // HMAC-SHA256 over the payload with the merchant's secret — the authenticity proof.
     private static string Sign(string payload, string secret)
     {
-        var key  = Encoding.UTF8.GetBytes(secret);
+        var key = Encoding.UTF8.GetBytes(secret);
         var data = Encoding.UTF8.GetBytes(payload);
         using var hmac = new HMACSHA256(key);
         return Convert.ToHexString(hmac.ComputeHash(data)).ToLower();
     }
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT _events HOLDS AT RUNTIME (snapshot after all of Program.cs has run):
+    //
+    // An append-only list in enqueue order. PaymentService.Notify enqueues one event per state
+    // change; Scenario 6's ProcessDue then tries to deliver them. Shown grouped by scenario:
+    //
+    //   _events (in order) = [
+    //
+    //      // Scen 1 (pay_1a2b3c)
+    //      { evt_..., merchant1, payment.authorized, Status=DELIVERED, Attempts=1 }
+    //      { evt_..., merchant1, payment.captured,   Status=DELIVERED, Attempts=1 }
+    //      { evt_..., merchant1, payment.settled,    Status=DELIVERED, Attempts=1 }
+    //
+    //      // Scen 2 (pay_4d5e6f) — ONE event only; the duplicate charge hit idempotency,
+    //      //                       returned before Notify, so it enqueued nothing
+    //      { evt_..., merchant1, payment.authorized, Status=DELIVERED, Attempts=1 }
+    //
+    //      // Scen 3 — a blocked charge still notifies
+    //      { evt_..., merchant1, payment.blocked,    Status=DELIVERED, Attempts=1 }
+    //
+    //      // Scen 4 — a failed charge still notifies
+    //      { evt_..., merchant1, payment.failed,     Status=DELIVERED, Attempts=1 }
+    //
+    //      // Scen 5 (pay_3m4n5o) — over-refund returned before Notify, so only 4 events
+    //      { evt_..., merchant1, payment.authorized, Status=DELIVERED, Attempts=1 }
+    //      { evt_..., merchant1, payment.captured,   Status=DELIVERED, Attempts=1 }
+    //      { evt_..., merchant1, payment.refunded,   Status=DELIVERED, Attempts=1 }
+    //      { evt_..., merchant1, payment.refunded,   Status=DELIVERED, Attempts=1 }
+    //   ]
+    //
+    // All 10 events target merchant1, so ProcessDue delivers them all on attempt 1 (Delivered=10,
+    // Pending=0). The failing-merchant path is wired up (merchant2) but not exercised here — had an
+    // event been for merchant2, it would stay Status=PENDING with NextRetry pushed out by the
+    // backoff ladder (10s, 1m, 5m, ...) until attempt 7, then flip to FAILED.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }

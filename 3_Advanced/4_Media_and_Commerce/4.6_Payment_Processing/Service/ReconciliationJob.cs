@@ -29,11 +29,11 @@ using System.Linq;
 public class ReconciliationJob
 {
     private readonly LedgerService _ledger;
-    private readonly PaymentStore  _payments;
+    private readonly PaymentStore _payments;
 
     public ReconciliationJob(LedgerService ledger, PaymentStore payments)
     {
-        _ledger   = ledger;
+        _ledger = ledger;
         _payments = payments;
     }
 
@@ -83,4 +83,28 @@ public class ReconciliationJob
         System.Console.WriteLine($"  [Reconcile] DONE — matched={matched} missing_in_bank={missingInBank} mismatches={mismatch} bank_only={missingInLedger}");
         System.Console.WriteLine($"  [Reconcile] Ledger balanced: {_ledger.IsBalanced()}");
     }
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT THIS CLASS HOLDS AT RUNTIME:
+    //
+    // Nothing persistent — ReconciliationJob is a STATELESS batch job. Its only fields are two
+    // injected references:
+    //
+    //   _ledger    ->  LedgerService   (our record of money sent to the bank)
+    //   _payments  ->  PaymentStore    (injected for extension; Run currently reads only _ledger)
+    //
+    // All working data is LOCAL to a single Run() call and discarded when it returns. For the
+    // Scenario 7 bank report, those locals look like:
+    //
+    //   internalSettlements (paymentId -> cents) = {
+    //                                                "pay_1a2b3c" -> 9710   // only Scen 1 settled
+    //                                              }
+    //   bankLookup          (refId     -> cents) = {
+    //                                                "pay_1a2b3c"     -> 9710,   // matches ours
+    //                                                "pay_unknown99"  -> 2000    // no match -> flag
+    //                                              }
+    //   counters: matched=1, missingInBank=0, mismatches=0, bankOnly=1
+    //
+    // Keeping no state between runs is what lets the nightly job run on a fresh worker each night.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }

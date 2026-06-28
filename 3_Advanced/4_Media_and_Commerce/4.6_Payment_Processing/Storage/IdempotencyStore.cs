@@ -50,4 +50,64 @@ public class IdempotencyStore
             ExpiresAt = DateTime.UtcNow.Add(Ttl)
         };
     }
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT _store HOLDS AT RUNTIME (snapshot after all of Program.cs has run):
+    //
+    //   _store ("merchantId:key" -> IdempotencyEntry) = {
+    //
+    //      // Scen 1: authorized charge
+    //
+    //      "merchant1:order-1001"  ->  {
+    //                                   Key="order-1001",
+    //                                   PaymentId="pay_1a2b3c",
+    //                                   Result="AUTHORIZED",
+    //                                   ExpiresAt=now+24h
+    //                                 }
+    //
+    //
+    //      // Scen 2: charged once; the identical 2nd request READ this entry instead of charging
+    //
+    //      "merchant1:order-1002"  ->  {
+    //                                   Key="order-1002",
+    //                                   PaymentId="pay_4d5e6f",
+    //                                   Result="AUTHORIZED",
+    //                                   ExpiresAt=now+24h
+    //                                 }
+    //
+    //
+    //      // Scen 3: even a blocked charge is cached — a retry returns BLOCKED, never re-runs fraud
+    //
+    //      "merchant1:order-1003"  ->  {
+    //                                   Key="order-1003",
+    //                                   PaymentId="pay_7g8h9i",
+    //                                   Result="BLOCKED",
+    //                                   ExpiresAt=now+24h
+    //                                 }
+    //
+    //
+    //      // Scen 4: failed charges are cached too — a retry returns FAILED without re-hitting the bank
+    //
+    //      "merchant1:order-1004"  ->  {
+    //                                   Key="order-1004",
+    //                                   PaymentId="pay_0j1k2l",
+    //                                   Result="FAILED",
+    //                                   ExpiresAt=now+24h
+    //                                 }
+    //
+    //
+    //      // Scen 5: authorized charge (later captured + refunded, but the cached result is the charge)
+    //
+    //      "merchant1:order-1005"  ->  {
+    //                                   Key="order-1005",
+    //                                   PaymentId="pay_3m4n5o",
+    //                                   Result="AUTHORIZED",
+    //                                   ExpiresAt=now+24h
+    //                                 }
+    //   }
+    //
+    // Every charge — success, block, OR failure — leaves exactly one entry here, keyed by merchant
+    // + idempotency key. That's what makes a retry safe: it returns this stored outcome instead of
+    // charging again. Entries self-expire after 24h, after which the same key counts as a new request.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }

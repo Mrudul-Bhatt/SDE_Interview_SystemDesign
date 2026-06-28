@@ -54,4 +54,24 @@ public class CardVault
         RandomNumberGenerator.Fill(b);
         return b;
     }
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT _tokenToPan HOLDS AT RUNTIME (snapshot after all of Program.cs has run):
+    //
+    //   _tokenToPan (token -> raw PAN) = {
+    //
+    //      // goodToken — the valid test card used by Scenarios 1, 2, 3, 5
+    //
+    //      "tok_9f3a1b2c..."  ->  "4000000000000000"
+    //
+    //
+    //      // declinedToken — the card the bank rejects, used by Scenario 4
+    //
+    //      "tok_7d8e9f0a..."  ->  "4111111111111111"
+    //   }
+    //
+    // Only two cards are ever tokenized in the demo. Every other store and log holds only the
+    // opaque "tok_..." values — this dictionary is the SINGLE place the raw card numbers exist
+    // (encrypted under an HSM key in production). A leak of any other store reveals tokens, not PANs.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }

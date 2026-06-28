@@ -55,4 +55,21 @@ public class CardNetworkGateway
     {
         var b = new byte[n]; RandomNumberGenerator.Fill(b); return b;
     }
+
+    // ──────────────────────────────────────────────────────────────────────────────────
+    // WHAT _declinedPans HOLDS AT RUNTIME (snapshot for the whole demo):
+    //
+    //   _declinedPans (set of PANs the simulated bank rejects) = {
+    //
+    //      "4111111111111111"   // wired in Program: new CardNetworkGateway("4111111111111111")
+    //   }
+    //
+    // This set is fixed at construction and never changes. It's ONLY a test seam — it lets the
+    // demo force a decline (Scenario 4 charges the card behind declinedToken, whose PAN is in
+    // this set, so Authorize returns CARD_DECLINED). Every other PAN authorizes successfully.
+    //
+    // In reality there is no such list — the issuing bank decides accept/decline per request and
+    // we only learn the outcome from its response. Capture and Refund hold no state at all; they
+    // just echo success in this simulation.
+    // ──────────────────────────────────────────────────────────────────────────────────
 }
